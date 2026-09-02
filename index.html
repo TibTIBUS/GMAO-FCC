@@ -1849,10 +1849,25 @@ function getAllPhotos() {
    ============================================================ */
 const modalEdit = document.getElementById('modalEdit');
 
+function suggestNextRef() {
+  let best = null; // { prefix, numStr, num }
+  _cache.forEach(x => {
+    if (!x.ref) return;
+    const m = String(x.ref).trim().match(/^(.*?)(\d+)$/);
+    if (!m) return;
+    const num = parseInt(m[2], 10);
+    if (!best || num > best.num) best = { prefix: m[1], numStr: m[2], num };
+  });
+  if (!best) return '';
+  const nextNum = best.num + 1;
+  const nextStr = String(nextNum).padStart(best.numStr.length, '0');
+  return best.prefix + nextStr;
+}
+
 function openNew() {
   document.getElementById('editTitle').textContent = 'Nouvelle intervention';
   document.getElementById('eId').value = '';
-  document.getElementById('eRef').value = '';
+  document.getElementById('eRef').value = suggestNextRef();
   document.getElementById('eDeclarant').value = '';
   document.getElementById('eZone').value = '';
   document.getElementById('eEquipement').value = '';

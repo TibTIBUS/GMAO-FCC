@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="France Croco favicon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e8f2a"/>
+      <stop offset="100%" stop-color="#0f6f1f"/>
+    </linearGradient>
+    <linearGradient id="cellLight" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#74d04a" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#2f9a30" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="cellDark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c5f18"/>
+      <stop offset="100%" stop-color="#165f14"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="0.6" flood-color="#0a3f0f" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="url(#bg)"/>
+  <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="11" fill="none" stroke="#d7f2ad" stroke-opacity="0.35" stroke-width="1.2"/>
+
+  <g filter="url(#shadow)">
+    <!-- top row -->
+    <rect x="5"  y="6"  width="13" height="11" rx="3" fill="#39a73a" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="19" y="5"  width="15" height="12" rx="3" fill="url(#cellLight)" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="35" y="6"  width="10" height="11" rx="3" fill="#1f7f22" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="46" y="5"  width="13" height="12" rx="3" fill="#2e9a33" stroke="#d5f3a2" stroke-width="1.1"/>
+
+    <!-- second row -->
+    <rect x="4"  y="17" width="11" height="12" rx="3" fill="url(#cellDark)" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="16" y="18" width="15" height="11" rx="3" fill="#3fb13d" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="32" y="17" width="12" height="12" rx="3" fill="#16771d" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="45" y="18" width="15" height="11" rx="3" fill="url(#cellLight)" stroke="#d5f3a2" stroke-width="1.1"/>
+
+    <!-- third row -->
+    <rect x="6"  y="29" width="14" height="11" rx="3" fill="#1a7f21" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="21" y="28" width="11" height="13" rx="3" fill="#47b644" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="33" y="29" width="15" height="11" rx="3" fill="url(#cellDark)" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="49" y="28" width="10" height="13" rx="3" fill="#2d9130" stroke="#d5f3a2" stroke-width="1.1"/>
+
+    <!-- fourth row -->
+    <rect x="5"  y="40" width="10" height="12" rx="3" fill="url(#cellLight)" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="16" y="41" width="13" height="11" rx="3" fill="#1f8424" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="30" y="40" width="12" height="12" rx="3" fill="#39a73a" stroke="#d5f3a2" stroke-width="1.1"/>
+    <rect x="43" y="41" width="16" height="11" rx="3" fill="url(#cellDark)" stroke="#d5f3a2" stroke-width="1.1"/>
+
+    <!-- bottom accents -->
+    <path d="M5 54h12v4H5z" fill="#1e7520" opacity="0.92"/>
+    <path d="M18 53h14v5H18z" fill="#4dbe47" opacity="0.9"/>
+    <path d="M33 54h10v4H33z" fill="#156d1b" opacity="0.95"/>
+    <path d="M44 53h15v5H44z" fill="#2b8c2f" opacity="0.9"/>
+  </g>
+</svg>

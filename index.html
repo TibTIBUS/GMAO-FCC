@@ -1,0 +1,2366 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="favicon-fc.svg">
+<title>GMAO Maintenance V1.4 — Suivi des interventions</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   1. VARIABLES & THÈME
+   ============================================================ */
+:root {
+  --bg:           #eceae4;
+  --surface:      #ffffff;
+  --surface-alt:  #f6f5f1;
+  --ink:          #1c1f26;
+  --ink-soft:     #5b6270;
+  --line:         #d9d7cf;
+  --accent:       #e2620a;
+  --accent-dark:  #b84d05;
+  --steel:        #2f4858;
+  --green:        #166534;
+
+  --st-open:      #d6322e;
+  --st-progress:  #d98a00;
+  --st-closed:    #2f8a52;
+
+  --pr-basse:     #6b7280;
+  --pr-normale:   #2563eb;
+  --pr-haute:     #d98a00;
+  --pr-urgente:   #d6322e;
+
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(28,31,38,.08), 0 6px 18px rgba(28,31,38,.06);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.5;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: 'IBM Plex Mono', monospace; }
+
+/* ============================================================
+   2. EN-TÊTE
+   ============================================================ */
+header.app-header {
+  background: var(--steel);
+  color: #fff;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand .logo {
+  width: 38px; height: 38px;
+  border-radius: 8px;
+  background: var(--accent);
+  display: grid; place-items: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600; font-size: 18px; color: #fff;
+  flex-shrink: 0;
+}
+.brand h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -.2px; }
+.brand small { display: block; font-size: .72rem; color: #b9c4cc; font-weight: 400; letter-spacing: .4px; }
+
+.conn-status {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .78rem; color: #b9c4cc; font-family: 'IBM Plex Mono', monospace;
+  padding: 5px 10px; border-radius: 20px;
+  background: rgba(255,255,255,.08);
+  transition: all .3s;
+}
+.conn-status .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #6b7280; flex-shrink: 0;
+  transition: background .3s;
+}
+.conn-status.online .dot  { background: #2f8a52; }
+.conn-status.offline .dot { background: #d6322e; }
+.conn-status.online  { color: #a8d5b5; }
+.conn-status.offline { color: #f0a09e; }
+
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Bouton export — PC uniquement */
+.btn-export-wrap { display: flex; }
+@media (max-width: 760px) { .btn-export-wrap { display: none !important; } }
+
+/* ============================================================
+   3. BOUTONS
+   ============================================================ */
+.btn {
+  font-family: inherit; font-size: .92rem; font-weight: 600;
+  border: 1px solid transparent; border-radius: 8px;
+  padding: 10px 16px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: transform .05s ease, background .15s ease, box-shadow .15s ease;
+  white-space: nowrap; min-height: 44px;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-dark); }
+.btn-ghost { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.25); }
+.btn-ghost:hover { background: rgba(255,255,255,.2); }
+.btn-light { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.btn-light:hover { background: var(--surface-alt); }
+.btn-success { background: #16a34a; color: #fff; }
+.btn-success:hover { background: #15803d; }
+.btn-sm { padding: 7px 11px; font-size: .82rem; min-height: 36px; }
+.btn-danger { background: #fff; color: var(--st-open); border-color: #f0c4c2; }
+.btn-danger:hover { background: #fdeceb; }
+.btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+.btn-trash {
+  background: none; border: none; padding: 6px 7px; min-height: auto;
+  border-radius: 6px; color: #b0b5be; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color .15s, background .15s; font-size: 1rem; line-height: 1;
+}
+.btn-trash:hover { color: var(--st-open); background: #fdeceb; }
+.btn-trash:active { transform: translateY(1px); }
+
+/* ============================================================
+   4. NAVIGATION ONGLETS
+   ============================================================ */
+.tabs-nav {
+  background: var(--steel);
+  border-bottom: 2px solid rgba(255,255,255,.12);
+  display: flex;
+  gap: 0;
+  padding: 0 18px;
+  position: sticky;
+  top: 66px;
+  z-index: 49;
+}
+.tab-btn {
+  font-family: inherit; font-size: .88rem; font-weight: 600;
+  color: rgba(255,255,255,.55); background: none; border: none;
+  padding: 10px 18px; cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+  display: flex; align-items: center; gap: 7px;
+  white-space: nowrap;
+}
+.tab-btn:hover { color: rgba(255,255,255,.85); }
+.tab-btn.active { color: #fff; border-bottom-color: var(--accent); }
+.tab-count {
+  background: rgba(255,255,255,.15); color: rgba(255,255,255,.8);
+  border-radius: 10px; font-size: .7rem; font-weight: 700;
+  padding: 1px 7px; font-family: 'IBM Plex Mono', monospace;
+}
+.tab-btn.active .tab-count { background: var(--accent); color: #fff; }
+
+/* ============================================================
+   5. CONTENEUR PRINCIPAL
+   ============================================================ */
+main { max-width: 1200px; margin: 0 auto; padding: 18px; }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.config-banner {
+  background: #fff8e6; border: 1px solid #f0c542; border-radius: var(--radius);
+  padding: 16px 18px; margin-bottom: 18px; display: none;
+}
+.config-banner.show { display: block; }
+.config-banner strong { color: #a86a00; }
+.config-banner code {
+  background: #f6f0d6; border-radius: 4px; padding: 2px 6px;
+  font-family: 'IBM Plex Mono', monospace; font-size: .88rem;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.stat-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 16px;
+  box-shadow: var(--shadow); border-left: 4px solid var(--ink-soft);
+}
+.stat-card.s-total    { border-left-color: var(--steel); }
+.stat-card.s-open     { border-left-color: var(--st-open); }
+.stat-card.s-progress { border-left-color: var(--st-progress); }
+.stat-card.s-closed   { border-left-color: var(--st-closed); }
+.stat-card .num { font-family: 'IBM Plex Mono', monospace; font-size: 1.9rem; font-weight: 600; line-height: 1; }
+.stat-card .lbl { font-size: .78rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .5px; margin-top: 6px; }
+
+/* ============================================================
+   6. BARRE DE FILTRES
+   ============================================================ */
+.toolbar {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px;
+  box-shadow: var(--shadow); margin-bottom: 16px;
+}
+.toolbar-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 5px; flex: 1 1 150px; min-width: 130px; }
+.field label { font-size: .72rem; font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .5px; }
+.field-search { flex: 2 1 220px; }
+
+input, select, textarea {
+  font-family: inherit; font-size: .95rem; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; width: 100%; min-height: 44px;
+}
+textarea { min-height: 90px; resize: vertical; }
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(226,98,10,.15);
+}
+.filter-reset { flex: 0 0 auto; }
+
+/* ============================================================
+   7. TABLEAU
+   ============================================================ */
+.list-wrap {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+}
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 700px; }
+#mainTable { min-width: 980px; table-layout: fixed; }
+thead th {
+  text-align: left; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--ink-soft); font-weight: 600;
+  padding: 12px 14px; background: var(--surface-alt);
+  border-bottom: 2px solid var(--line); white-space: nowrap;
+}
+tbody td { padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: .92rem; vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:nth-child(even) { background: #faf9f6; }
+tbody tr:hover { background: #fff5ec; }
+
+/* Largeurs de colonnes — tableau interventions */
+.col-ref    { width: 72px; }
+.col-date   { width: 96px; }
+.col-zone   { width: 92px; }
+.col-equip  { width: auto; }
+.col-type   { width: 104px; }
+.col-decl   { width: 110px; }
+.col-prio   { width: 96px; }
+.col-statut { width: 104px; }
+.col-act    { width: 176px; }
+
+.cell-id { font-family: 'IBM Plex Mono', monospace; font-size: .82rem; font-weight: 600; color: var(--ink); }
+.cell-desc { max-width: 320px; }
+
+/* Date sur deux lignes : jour en avant, heure atténuée */
+.cell-date { font-family: 'IBM Plex Mono', monospace; line-height: 1.35; }
+.cell-date .d-day  { display: block; font-size: .82rem; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.cell-date .d-time { display: block; font-size: .74rem; color: var(--ink-soft); white-space: nowrap; }
+
+/* Cellule regroupée Équipement / Problème */
+.cell-equip { line-height: 1.4; }
+.cell-equip .eq-name { font-weight: 600; font-size: .92rem; color: var(--ink); margin-bottom: 3px; }
+.cell-equip .eq-prob { display: flex; align-items: flex-start; gap: 7px; }
+.cell-equip .eq-prob .eq-text { font-size: .88rem; color: var(--ink-soft); }
+.cell-equip .eq-meta { margin-top: 5px; }
+
+.row-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+
+/* Zone badge */
+.zone-badge {
+  display: inline-block; font-size: .72rem; font-weight: 600;
+  padding: 2px 7px; border-radius: 4px; background: #e8edf5; color: #374151;
+  letter-spacing: .2px; white-space: nowrap;
+}
+
+/* Badges statut / priorité / type */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: .76rem; font-weight: 600;
+  padding: 4px 9px; border-radius: 20px; white-space: nowrap;
+}
+.badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.b-open     { color: var(--st-open);   background: #fdecea; }
+.b-progress { color: #a86a00;          background: #fdf2dc; }
+.b-closed   { color: var(--st-closed); background: #e6f3ec; }
+.b-pr-basse   { color: var(--pr-basse);   background: #eef0f2; }
+.b-pr-normale { color: var(--pr-normale); background: #e7eefd; }
+.b-pr-haute   { color: #a86a00;           background: #fdf2dc; }
+.b-pr-urgente { color: var(--pr-urgente); background: #fdecea; }
+.b-pr-semaine { color: #6d28d9; background: #e9d5ff; border: 1px solid #c084fc; position: relative; z-index: 2; display: inline-block; text-align: center; line-height: 1.05; padding: 4px 10px 4px 18px; }
+.b-pr-semaine::before { position: absolute; left: 7px; top: 8px; }
+.b-pr-semaine .prio-line { display: block; white-space: nowrap; }
+
+/* Badges type maintenance */
+.b-correctif   { color: #1d4ed8; background: #dbeafe; }
+.b-preventif   { color: #166534; background: #dcfce7; }
+.b-amelioratif { color: #7c3aed; background: #ede9fe; }
+
+/* Badge photo */
+.photo-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: .7rem; color: var(--ink-soft); background: var(--surface-alt);
+  border: 1px solid var(--line); border-radius: 4px;
+  padding: 2px 6px; white-space: nowrap;
+}
+
+/* Badges préventif statut */
+.b-prev-afaire  { color: #9a3412; background: #ffedd5; }
+.b-prev-fait    { color: var(--st-closed); background: #e6f3ec; }
+.b-prev-retard  { color: var(--st-open); background: #fdecea; }
+
+.int-cards { display: none; }
+.list-loading { padding: 40px 20px; text-align: center; color: var(--ink-soft); display: none; }
+.list-loading.show { display: block; }
+.spinner {
+  display: inline-block; width: 24px; height: 24px; border-radius: 50%;
+  border: 3px solid var(--line); border-top-color: var(--accent);
+  animation: spin .7s linear infinite; vertical-align: middle; margin-right: 8px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty { padding: 50px 20px; text-align: center; color: var(--ink-soft); }
+.empty .big { font-size: 1.05rem; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+.updated-flash { animation: flash-row .8s ease; }
+@keyframes flash-row { 0% { background: #fff8e6; } 100% { background: transparent; } }
+
+/* ============================================================
+   8. UPLOAD PHOTOS
+   ============================================================ */
+.photo-drop-zone {
+  border: 2px dashed var(--line); border-radius: 8px;
+  padding: 20px; text-align: center;
+  color: var(--ink-soft); font-size: .88rem;
+  cursor: pointer; transition: border-color .15s, background .15s;
+  background: var(--surface-alt);
+}
+.photo-drop-zone:hover, .photo-drop-zone.drag-over {
+  border-color: var(--accent); background: #fff8f3;
+}
+.photo-drop-zone input[type="file"] { display: none; }
+.photo-drop-icon { font-size: 1.6rem; margin-bottom: 6px; }
+
+.photo-previews {
+  display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;
+}
+.photo-thumb {
+  position: relative; width: 80px; height: 80px;
+  border-radius: 6px; overflow: hidden; border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-thumb-remove {
+  position: absolute; top: 2px; right: 2px;
+  background: rgba(0,0,0,.55); color: #fff; border: none;
+  border-radius: 50%; width: 20px; height: 20px;
+  font-size: .8rem; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; line-height: 1;
+}
+.photo-thumb-remove:hover { background: rgba(214,50,46,.85); }
+
+/* Photos dans la vue détail */
+.photo-gallery {
+  display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px;
+}
+.photo-gallery a {
+  display: block; width: 100px; height: 100px;
+  border-radius: 6px; overflow: hidden; border: 1px solid var(--line);
+}
+.photo-gallery a img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ============================================================
+   9. ONGLET PRÉVENTIF — styles supplémentaires
+   ============================================================ */
+.prev-toolbar-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; }
+.prev-toolbar-left { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; flex: 1; }
+
+.prev-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px;
+}
+.stat-card.s-prev-afaire { border-left-color: #ea580c; }
+.stat-card.s-prev-fait   { border-left-color: var(--st-closed); }
+.stat-card.s-prev-retard { border-left-color: var(--st-open); }
+
+/* Indicateur échéance */
+.echeance-ok     { color: var(--st-closed); font-weight: 600; font-size: .82rem; }
+.echeance-proche { color: #a86a00; font-weight: 600; font-size: .82rem; }
+.echeance-retard { color: var(--st-open); font-weight: 600; font-size: .82rem; }
+
+/* ============================================================
+   10. MODALES
+   ============================================================ */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(20,23,28,.55);
+  display: none; align-items: flex-start; justify-content: center;
+  padding: 20px; z-index: 100; overflow-y: auto;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--surface); border-radius: 14px;
+  width: 100%; max-width: 620px; margin: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  animation: pop .18s ease;
+}
+@keyframes pop { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px; border-bottom: 1px solid var(--line);
+}
+.modal-head h2 { font-size: 1.1rem; font-weight: 700; }
+.modal-head .close-x {
+  background: none; border: none; font-size: 1.6rem; line-height: 1;
+  color: var(--ink-soft); cursor: pointer; padding: 4px 8px; border-radius: 6px;
+}
+.modal-head .close-x:hover { background: var(--surface-alt); color: var(--ink); }
+.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.modal-body .field { flex: 1 1 100%; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+.modal-foot {
+  padding: 16px 20px; border-top: 1px solid var(--line);
+  display: flex; justify-content: flex-end; gap: 10px;
+}
+.req { color: var(--st-open); }
+.hint { font-size: .8rem; color: var(--ink-soft); }
+
+.section-sep {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .8px; color: var(--ink-soft);
+  border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-top: 2px;
+}
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(80px);
+  background: var(--ink); color: #fff;
+  padding: 12px 20px; border-radius: 10px; font-size: .9rem; font-weight: 500;
+  box-shadow: 0 8px 24px rgba(0,0,0,.3);
+  opacity: 0; transition: all .3s ease; z-index: 200; pointer-events: none;
+}
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+/* Modale confirmation suppression */
+.confirm-overlay {
+  position: fixed; inset: 0;
+  background: rgba(20,23,28,.6);
+  display: none; align-items: center; justify-content: center;
+  z-index: 200; padding: 20px;
+}
+.confirm-overlay.show { display: flex; }
+.confirm-box {
+  position: relative;
+  background: var(--surface); border-radius: 14px;
+  padding: 28px 24px; max-width: 380px; width: 100%;
+  box-shadow: 0 18px 50px rgba(0,0,0,.28);
+  text-align: center; animation: pop .18s ease;
+}
+.confirm-box .close-x {
+  position: absolute; top: 8px; right: 8px;
+  background: none; border: none; font-size: 1.5rem; line-height: 1;
+  color: var(--ink-soft); cursor: pointer; padding: 4px 8px; border-radius: 6px;
+}
+.confirm-box .close-x:hover { background: var(--surface-alt); color: var(--ink); }
+.confirm-box .confirm-icon { font-size: 2.4rem; margin-bottom: 12px; line-height: 1; }
+.confirm-box h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 8px; }
+.confirm-box p { font-size: .9rem; color: var(--ink-soft); margin-bottom: 22px; }
+.confirm-actions { display: flex; gap: 10px; justify-content: center; }
+
+/* ============================================================
+   11. RESPONSIVE — MOBILE
+   ============================================================ */
+@media (max-width: 760px) {
+  header.app-header { padding: 10px 14px; gap: 8px; }
+  .brand h1 { font-size: 1rem; }
+  .brand small { display: none; }
+  .conn-status span:not(.dot) { display: none; }
+  .header-actions { gap: 6px; }
+
+  main { padding: 12px; }
+  .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+  .stat-card { padding: 10px 12px; }
+  .stat-card .num { font-size: 1.5rem; }
+  .stat-card .lbl { font-size: .68rem; margin-top: 4px; }
+
+  .toolbar { padding: 10px; margin-bottom: 12px; }
+  .toolbar-row { gap: 8px; }
+  .field { flex: 1 1 100%; min-width: 0; }
+  .field-search { flex: 1 1 100%; }
+  .filter-reset { width: 100%; }
+  .filter-reset .btn { width: 100%; justify-content: center; }
+
+  .list-wrap { background: transparent; border: none; box-shadow: none; overflow: visible; }
+  table { display: none; }
+
+  .int-cards { display: flex; flex-direction: column; gap: 10px; }
+  .int-card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+  }
+  .int-card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); gap: 8px; flex-wrap: wrap;
+  }
+  .int-card-ref { font-family: 'IBM Plex Mono', monospace; font-size: .78rem; color: var(--ink-soft); flex-shrink: 0; }
+  .int-card-badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .int-card-body { padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .int-card-desc { font-size: .92rem; color: var(--ink); line-height: 1.4; }
+  .int-card-meta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: .8rem; color: var(--ink-soft); }
+  .int-card-meta span { display: flex; align-items: center; gap: 4px; }
+  .int-card-foot {
+    padding: 8px 14px; border-top: 1px solid var(--line);
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap; background: var(--surface-alt);
+  }
+  .int-card-foot .btn-trash { margin-left: auto; }
+
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal { border-radius: 18px 18px 0 0; max-width: 100%; max-height: 92vh; overflow-y: auto; margin: 0; }
+  .form-grid, .form-grid-3 { grid-template-columns: 1fr; }
+  .modal-foot { flex-direction: column-reverse; gap: 8px; }
+  .modal-foot .btn { width: 100%; justify-content: center; }
+
+  .confirm-box { border-radius: 14px; }
+  .prev-stats { grid-template-columns: repeat(3, 1fr); }
+  .tabs-nav { top: 58px; padding: 0 12px; }
+  .tab-btn { padding: 10px 12px; font-size: .82rem; }
+}
+
+@media (max-width: 400px) {
+  .stats { grid-template-columns: 1fr 1fr; }
+  .btn-sm { font-size: .78rem; padding: 6px 9px; }
+  .prev-stats { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ÉCRAN DE CONNEXION (verrou d'accès) -->
+<style>
+  body.locked { overflow: hidden; }
+  .login-overlay {
+    position: fixed; inset: 0; z-index: 99999;
+    display: none; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+  }
+  .login-overlay.show { display: flex; }
+  .login-card {
+    background: #fff; width: 100%; max-width: 360px; margin: 16px;
+    padding: 32px 28px; border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+    font-family: inherit; box-sizing: border-box;
+  }
+  .login-card .login-logo {
+    width: 52px; height: 52px; border-radius: 12px;
+    background: #2563eb; color: #fff; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; margin: 0 auto 16px;
+  }
+  .login-card h2 { text-align: center; margin: 0 0 4px; font-size: 20px; color: #0f172a; }
+  .login-card p.sub { text-align: center; margin: 0 0 22px; font-size: 13px; color: #64748b; }
+  .login-card label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin: 0 0 6px; }
+  .login-card input {
+    width: 100%; box-sizing: border-box; padding: 11px 13px; margin-bottom: 16px;
+    border: 1px solid #cbd5e1; border-radius: 9px; font-size: 15px;
+  }
+  .login-card input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+  .login-card button {
+    width: 100%; padding: 12px; border: none; border-radius: 9px;
+    background: #2563eb; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .login-card button:disabled { opacity: .6; cursor: default; }
+  .login-error { color: #dc2626; font-size: 13px; text-align: center; min-height: 18px; margin-top: 12px; }
+  .login-foot { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 18px; }
+</style>
+<div class="login-overlay" id="loginOverlay">
+  <form class="login-card" id="loginForm" autocomplete="on">
+    <div class="login-logo">FC</div>
+    <h2>GMAO Maintenance</h2>
+    <p class="sub">Accès réservé — connexion requise</p>
+    <label for="loginEmail">Identifiant (e-mail)</label>
+    <input type="email" id="loginEmail" required autocomplete="username" placeholder="prenom@usine.fr">
+    <label for="loginPwd">Mot de passe</label>
+    <input type="password" id="loginPwd" required autocomplete="current-password" placeholder="••••••••">
+    <button type="submit" id="loginBtn">Se connecter</button>
+    <div class="login-error" id="loginError"></div>
+    <div class="login-foot">🔒 Données protégées · accès individuel</div>
+  </form>
+</div>
+
+<!-- EN-TÊTE -->
+<header class="app-header">
+  <div class="brand">
+    <div class="logo">FC</div>
+    <div>
+      <h1>GMAO Maintenance</h1>
+      <small class="mono">SUIVI DES INTERVENTIONS · V1.4</small>
+    </div>
+  </div>
+  <div class="header-actions">
+    <div class="conn-status" id="connStatus">
+      <span class="dot"></span>
+      <span id="connLabel">Connexion…</span>
+    </div>
+    <!-- Bouton export — masqué sur mobile via CSS -->
+    <div class="btn-export-wrap">
+      <button class="btn btn-ghost" id="btnExport" title="Exporter les interventions (CSV)">
+        ↓ Exporter CSV
+      </button>
+    </div>
+    <button class="btn btn-primary" id="btnNew">＋ Nouvelle intervention</button>
+    <button class="btn btn-ghost" id="btnLogout" title="Se déconnecter">⎋ Déconnexion</button>
+  </div>
+</header>
+
+<!-- ONGLETS -->
+<nav class="tabs-nav">
+  <button class="tab-btn active" data-tab="interventions">
+    🔧 Interventions
+    <span class="tab-count" id="tabCountInt">—</span>
+  </button>
+  <button class="tab-btn" data-tab="preventif">
+    📋 Préventif
+    <span class="tab-count" id="tabCountPrev">—</span>
+  </button>
+</nav>
+
+<main>
+  <!-- Bannière config -->
+  <div class="config-banner" id="configBanner">
+    <strong>⚙️ Configuration requise</strong> — Ouvre ce fichier dans un éditeur
+    et remplace les deux valeurs en haut du script :<br>
+    <code>SUPABASE_URL</code> et <code>SUPABASE_ANON_KEY</code>
+    par les informations de ton projet Supabase
+    (<em>Project Settings → API</em>).
+  </div>
+
+  <!-- ========================================================
+       PANNEAU INTERVENTIONS
+       ======================================================== -->
+  <div class="tab-panel active" id="panel-interventions">
+
+    <!-- Statistiques -->
+    <section class="stats" id="stats">
+      <div class="stat-card s-total"><div class="num mono">—</div><div class="lbl">Total</div></div>
+      <div class="stat-card s-open"><div class="num mono">—</div><div class="lbl">Ouverts</div></div>
+      <div class="stat-card s-progress"><div class="num mono">—</div><div class="lbl">En cours</div></div>
+      <div class="stat-card s-closed"><div class="num mono">—</div><div class="lbl">Clôturés</div></div>
+    </section>
+
+    <!-- Filtres -->
+    <section class="toolbar">
+      <div class="toolbar-row">
+        <div class="field field-search">
+          <label for="fSearch">Recherche</label>
+          <input type="text" id="fSearch" placeholder="Mot-clé, équipement, déclarant, N° demande…">
+        </div>
+        <div class="field">
+          <label for="fStatut">Statut</label>
+          <select id="fStatut">
+            <option value="">Tous</option>
+            <option>Ouvert</option>
+            <option>En cours</option>
+            <option>Clôturé</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fType">Type</label>
+          <select id="fType">
+            <option value="">Tous</option>
+            <option>Correctif</option>
+            <option>Préventif</option>
+            <option>Amélioratif</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fPriorite">Priorité</label>
+          <select id="fPriorite">
+            <option value="">Toutes</option>
+            <option>Urgente</option>
+            <option>Haute</option>
+            <option>Normale</option>
+            <option>Basse</option>
+            <option>Priorité de la semaine</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fZone">Zone</label>
+          <select id="fZone">
+            <option value="">Toutes</option>
+            <option>Administratif</option>
+            <option>Brut</option>
+            <option>Extérieur</option>
+            <option>Finition</option>
+            <option>KTRC</option>
+            <option>Maintenance</option>
+            <option>Rivière</option>
+            <option>STEP</option>
+            <option>Teinture</option>
+            <option>Tri</option>
+            <option>Usine</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="fDate">À partir du</label>
+          <input type="date" id="fDate">
+        </div>
+        <div class="filter-reset">
+          <button class="btn btn-light" id="btnResetFilters">Réinitialiser</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Liste interventions -->
+    <section class="list-wrap">
+      <div class="list-loading show" id="listLoading">
+        <span class="spinner"></span> Chargement des interventions…
+      </div>
+      <div class="table-scroll">
+      <table id="mainTable" style="display:none">
+        <colgroup>
+          <col class="col-ref">
+          <col class="col-date">
+          <col class="col-zone">
+          <col class="col-equip">
+          <col class="col-type">
+          <col class="col-decl">
+          <col class="col-prio">
+          <col class="col-statut">
+          <col class="col-act">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>N°</th>
+            <th>Créé le</th>
+            <th>Zone</th>
+            <th>Équipement / Problème</th>
+            <th>Type</th>
+            <th>Déclarant</th>
+            <th>Priorité</th>
+            <th>Statut</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      </div>
+      <div class="int-cards" id="intCards"></div>
+      <div class="empty" id="emptyState" style="display:none;">
+        <div class="big">Aucune intervention</div>
+        <div>Aucun élément ne correspond aux filtres, ou la base est vide.</div>
+      </div>
+    </section>
+  </div><!-- /panel-interventions -->
+
+  <!-- ========================================================
+       PANNEAU PRÉVENTIF
+       ======================================================== -->
+  <div class="tab-panel" id="panel-preventif">
+
+    <!-- Stats préventif -->
+    <section class="prev-stats" id="prevStats">
+      <div class="stat-card s-prev-afaire"><div class="num mono">—</div><div class="lbl">À faire</div></div>
+      <div class="stat-card s-prev-fait"><div class="num mono">—</div><div class="lbl">Réalisés</div></div>
+      <div class="stat-card s-prev-retard"><div class="num mono">—</div><div class="lbl">En retard</div></div>
+    </section>
+
+    <!-- Filtres préventif -->
+    <section class="toolbar">
+      <div class="toolbar-row">
+        <div class="prev-toolbar-left">
+          <div class="field field-search">
+            <label for="pfSearch">Recherche</label>
+            <input type="text" id="pfSearch" placeholder="Équipement, description, technicien…">
+          </div>
+          <div class="field">
+            <label for="pfStatut">Statut</label>
+            <select id="pfStatut">
+              <option value="">Tous</option>
+              <option>À faire</option>
+              <option>Réalisé</option>
+              <option>En retard</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="pfFrequence">Fréquence</label>
+            <select id="pfFrequence">
+              <option value="">Toutes</option>
+              <option>Quotidien</option>
+              <option>Hebdomadaire</option>
+              <option>Mensuel</option>
+              <option>Trimestriel</option>
+              <option>Semestriel</option>
+              <option>Annuel</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="pfZone">Zone</label>
+            <select id="pfZone">
+              <option value="">Toutes</option>
+              <option>Administratif</option>
+              <option>Brut</option>
+              <option>Extérieur</option>
+              <option>Finition</option>
+              <option>KTRC</option>
+              <option>Maintenance</option>
+              <option>Rivière</option>
+              <option>STEP</option>
+              <option>Teinture</option>
+              <option>Tri</option>
+              <option>Usine</option>
+            </select>
+          </div>
+          <div class="filter-reset">
+            <button class="btn btn-light" id="btnResetPrevFilters">Réinitialiser</button>
+          </div>
+        </div>
+        <div style="flex-shrink:0;">
+          <button class="btn btn-success" id="btnNewPrev">＋ Nouvelle tâche préventive</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Liste préventif -->
+    <section class="list-wrap">
+      <div class="list-loading show" id="prevLoading">
+        <span class="spinner"></span> Chargement des tâches préventives…
+      </div>
+      <div class="table-scroll">
+      <table id="prevTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Équipement</th>
+            <th>Zone</th>
+            <th>Description</th>
+            <th>Fréquence</th>
+            <th>Échéances</th>
+            <th>Statut</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="prevTbody"></tbody>
+      </table>
+      </div>
+      <div class="int-cards" id="prevCards"></div>
+      <div class="empty" id="prevEmptyState" style="display:none;">
+        <div class="big">Aucune tâche préventive</div>
+        <div>Aucun élément ne correspond aux filtres, ou la liste est vide.</div>
+      </div>
+    </section>
+  </div><!-- /panel-preventif -->
+
+</main>
+
+<!-- ============================================================
+     MODALE 1 — Créer / Modifier intervention
+     ============================================================ -->
+<div class="modal-overlay" id="modalEdit">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="editTitle">Nouvelle intervention</h2>
+      <button class="close-x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="eId">
+
+      <!-- N° de demande + Déclarant -->
+      <div class="form-grid">
+        <div class="field">
+          <label for="eRef">N° de demande <span class="req">*</span></label>
+          <input type="text" id="eRef" placeholder="Ex. DI-2024-001">
+        </div>
+        <div class="field">
+          <label for="eDeclarant">Déclarant <span class="req">*</span></label>
+          <input type="text" id="eDeclarant" placeholder="Nom de la personne">
+        </div>
+      </div>
+
+      <!-- Zone + Équipement -->
+      <div class="section-sep">Localisation</div>
+      <div class="form-grid">
+        <div class="field">
+          <label for="eZone">Zone <span class="req">*</span></label>
+          <select id="eZone">
+            <option value="">— Sélectionner —</option>
+            <option>Administratif</option>
+            <option>Brut</option>
+            <option>Extérieur</option>
+            <option>Finition</option>
+            <option>KTRC</option>
+            <option>Maintenance</option>
+            <option>Rivière</option>
+            <option>STEP</option>
+            <option>Teinture</option>
+            <option>Tri</option>
+            <option>Usine</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="eEquipement">Équipement</label>
+          <input type="text" id="eEquipement" placeholder="Ex. Compresseur n°3">
+        </div>
+      </div>
+
+      <!-- Intervention -->
+      <div class="section-sep">Intervention</div>
+
+      <!-- Type de maintenance -->
+      <div class="form-grid">
+        <div class="field">
+          <label for="eTypeIntervention">Type de maintenance <span class="req">*</span></label>
+          <select id="eTypeIntervention">
+            <option value="Correctif" selected>Correctif</option>
+            <option value="Préventif">Préventif</option>
+            <option value="Amélioratif">Amélioratif</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ePriorite">Priorité</label>
+          <select id="ePriorite">
+            <option>Basse</option>
+            <option selected>Normale</option>
+            <option>Haute</option>
+            <option>Urgente</option>
+            <option>Priorité de la semaine</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="eDescription">Description du problème <span class="req">*</span></label>
+        <textarea id="eDescription" placeholder="Décrire la panne ou la demande de travaux…"></textarea>
+      </div>
+
+      <!-- Statut + Observation -->
+      <div class="field">
+        <label for="eStatut">Statut</label>
+        <select id="eStatut">
+          <option>Ouvert</option>
+          <option>En cours</option>
+          <option>Clôturé</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="eObservation">Observation du service maintenance</label>
+        <textarea id="eObservation" rows="3" placeholder="Remarques, diagnostic, suivi…"></textarea>
+      </div>
+
+      <!-- Photos -->
+      <div class="section-sep">Photos</div>
+      <div class="field">
+        <label>Ajouter des photos</label>
+        <div class="photo-drop-zone" id="photoDropZone">
+          <input type="file" id="photoInput" multiple accept="image/*">
+          <div class="photo-drop-icon">📷</div>
+          <div>Cliquer ou glisser des images ici</div>
+          <div style="font-size:.78rem;margin-top:4px;opacity:.7">JPG, PNG, WEBP · max 5 Mo / photo</div>
+        </div>
+        <div class="photo-previews" id="photoPreviews"></div>
+      </div>
+
+      <p class="hint" id="eDateHint"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-light" data-close>Annuler</button>
+      <button class="btn btn-primary" id="btnSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE 2 — Clôturer -->
+<div class="modal-overlay" id="modalClose">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Clôturer l'intervention</h2>
+      <button class="close-x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="cId">
+      <p class="hint" id="cContext"></p>
+      <div class="field">
+        <label for="cTechnicien">Technicien <span class="req">*</span></label>
+        <input type="text" id="cTechnicien" placeholder="Nom du technicien">
+      </div>
+      <div class="field">
+        <label for="cAction">Action réalisée <span class="req">*</span></label>
+        <textarea id="cAction" placeholder="Décrire l'intervention effectuée…"></textarea>
+      </div>
+      <div class="field">
+        <label for="cComment">Commentaire final</label>
+        <textarea id="cComment" placeholder="Pièces remplacées, suivi à prévoir, remarques…"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-light" data-close>Annuler</button>
+      <button class="btn btn-primary" id="btnConfirmClose">Valider la clôture</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE 3 — Détail intervention -->
+<div class="modal-overlay" id="modalView">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Détail de l'intervention</h2>
+      <button class="close-x" data-close>&times;</button>
+    </div>
+    <div class="modal-body" id="viewBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-light" data-close>Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE 4 — Créer / Modifier tâche préventive -->
+<div class="modal-overlay" id="modalPrev">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="prevEditTitle">Nouvelle tâche préventive</h2>
+      <button class="close-x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="pId">
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="pEquipement">Équipement <span class="req">*</span></label>
+          <input type="text" id="pEquipement" placeholder="Ex. Compresseur n°3">
+        </div>
+        <div class="field">
+          <label for="pZone">Zone</label>
+          <select id="pZone">
+            <option value="">— Sélectionner —</option>
+            <option>Administratif</option>
+            <option>Brut</option>
+            <option>Extérieur</option>
+            <option>Finition</option>
+            <option>KTRC</option>
+            <option>Maintenance</option>
+            <option>Rivière</option>
+            <option>STEP</option>
+            <option>Teinture</option>
+            <option>Tri</option>
+            <option>Usine</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="pDescription">Description de l'opération <span class="req">*</span></label>
+        <textarea id="pDescription" placeholder="Décrire l'opération de maintenance préventive à réaliser…"></textarea>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="pFrequence">Fréquence</label>
+          <select id="pFrequence">
+            <option>Quotidien</option>
+            <option>Hebdomadaire</option>
+            <option selected>Mensuel</option>
+            <option>Trimestriel</option>
+            <option>Semestriel</option>
+            <option>Annuel</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="pTechnicien">Technicien responsable</label>
+          <input type="text" id="pTechnicien" placeholder="Nom du technicien">
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="pDerniereRealisation">Dernière réalisation</label>
+          <input type="date" id="pDerniereRealisation">
+        </div>
+        <div class="field">
+          <label for="pProchaineEcheance">Prochaine échéance</label>
+          <input type="date" id="pProchaineEcheance">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="pStatut">Statut</label>
+        <select id="pStatut">
+          <option>À faire</option>
+          <option>Réalisé</option>
+          <option>En retard</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="pObservation">Observation</label>
+        <textarea id="pObservation" rows="3" placeholder="Remarques, pièces nécessaires, consignes…"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-light" data-close>Annuler</button>
+      <button class="btn btn-success" id="btnSavePrev">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE 5 — Détail tâche préventive -->
+<div class="modal-overlay" id="modalPrevView">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Détail tâche préventive</h2>
+      <button class="close-x" data-close>&times;</button>
+    </div>
+    <div class="modal-body" id="prevViewBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-light" data-close>Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE CONFIRMATION SUPPRESSION -->
+<div class="modal-overlay confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <button class="close-x" data-close>&times;</button>
+    <div class="confirm-icon">🗑️</div>
+    <h3 id="confirmTitle">Supprimer cet élément ?</h3>
+    <p id="confirmDesc">Cette action est irréversible.</p>
+    <div class="confirm-actions">
+      <button class="btn btn-light" id="confirmCancel">Annuler</button>
+      <button class="btn btn-danger" id="confirmOk">Supprimer définitivement</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   ⚙️  CONFIGURATION SUPABASE — À MODIFIER
+   ============================================================ */
+const SUPABASE_URL      = 'https://bxqnglkhdtymwcqgijas.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4cW5nbGtoZHR5bXdjcWdpamFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMjMxMTUsImV4cCI6MjA5NTg5OTExNX0.qWA3Iht8d4w4jKtiTmlsYFgpxYjzKkjxIjuRMLHTWiA';
+
+/* ============================================================
+   INITIALISATION
+   ============================================================ */
+const configured = !SUPABASE_URL.startsWith('REMPLACER');
+if (!configured) document.getElementById('configBanner').classList.add('show');
+
+let sb = null;
+if (configured) {
+  try {
+    const _lib = window.supabase || window.Supabase;
+    if (!_lib) throw new Error('Bibliothèque Supabase non chargée');
+    sb = _lib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch(e) { console.error('Erreur init Supabase :', e); }
+}
+
+/* ============================================================
+   1. COUCHE STOCKAGE — INTERVENTIONS
+   ============================================================ */
+const Store = {
+  TABLE: 'interventions',
+
+  async getAll() {
+    if (!sb) return [];
+    const { data, error } = await sb.from(this.TABLE).select('*').order('date_creation', { ascending: false });
+    if (error) { console.error(error); return []; }
+    return (data || []).map(dbToApp);
+  },
+
+  async add(item) {
+    if (!sb) return null;
+    const { data, error } = await sb.from(this.TABLE).insert([appToDB(item)]).select().single();
+    if (error) { console.error(error); return null; }
+    return dbToApp(data);
+  },
+
+  async update(id, changes) {
+    if (!sb) return null;
+    const payload = appToDB({ ...changes, dateModification: new Date().toISOString() });
+    const { data, error } = await sb.from(this.TABLE).update(payload).eq('id', id).select().single();
+    if (error) { console.error(error); return null; }
+    return dbToApp(data);
+  },
+
+  async remove(id) {
+    if (!sb) return;
+    const { error } = await sb.from(this.TABLE).delete().eq('id', id);
+    if (error) console.error(error);
+  }
+};
+
+/* ============================================================
+   2. COUCHE STOCKAGE — PRÉVENTIF
+   ============================================================ */
+const PrevStore = {
+  TABLE: 'preventif',
+
+  async getAll() {
+    if (!sb) return [];
+    const { data, error } = await sb.from(this.TABLE).select('*').order('prochaine_echeance', { ascending: true });
+    if (error) { console.error(error); return []; }
+    return (data || []).map(prevDbToApp);
+  },
+
+  async add(item) {
+    if (!sb) return null;
+    const { data, error } = await sb.from(this.TABLE).insert([prevAppToDB(item)]).select().single();
+    if (error) { console.error(error); return null; }
+    return prevDbToApp(data);
+  },
+
+  async update(id, changes) {
+    if (!sb) return null;
+    const payload = prevAppToDB({ ...changes, dateModification: new Date().toISOString() });
+    const { data, error } = await sb.from(this.TABLE).update(payload).eq('id', id).select().single();
+    if (error) { console.error(error); return null; }
+    return prevDbToApp(data);
+  },
+
+  async remove(id) {
+    if (!sb) return;
+    const { error } = await sb.from(this.TABLE).delete().eq('id', id);
+    if (error) console.error(error);
+  }
+};
+
+/* ============================================================
+   3. CONVERSION camelCase ↔ snake_case — INTERVENTIONS
+   ============================================================ */
+const SEP = '||';
+function packZone(zone, equipement) { return (zone || '') + SEP + (equipement || ''); }
+function unpackZone(raw) {
+  if (!raw) return { zone: '', equipement: '' };
+  const idx = raw.indexOf(SEP);
+  if (idx === -1) return { zone: raw, equipement: '' };
+  return { zone: raw.slice(0, idx), equipement: raw.slice(idx + SEP.length) };
+}
+
+function appToDB(x) {
+  const r = {};
+  if (x.id               !== undefined) r.id                = x.id;
+  if (x.ref              !== undefined) r.ref               = x.ref;
+  if (x.dateCreation     !== undefined) r.date_creation     = x.dateCreation;
+  if (x.dateModification !== undefined) r.date_modification = x.dateModification;
+  if (x.declarant        !== undefined) r.declarant         = x.declarant;
+  if (x.zone !== undefined || x.equipement !== undefined) {
+    r.zone = packZone(x.zone, x.equipement);
+  }
+  if (x.description       !== undefined) r.description        = x.description;
+  if (x.priorite          !== undefined) r.priorite           = x.priorite;
+  if (x.statut            !== undefined) r.statut             = x.statut;
+  if (x.technicien        !== undefined) r.technicien         = x.technicien;
+  if (x.actionRealisee    !== undefined) r.action_realisee    = x.actionRealisee;
+  if (x.dateCloture       !== undefined) r.date_cloture       = x.dateCloture;
+  if (x.commentaireFinal  !== undefined) r.commentaire_final  = x.commentaireFinal;
+  if (x.observation       !== undefined) r.observation        = x.observation;
+  if (x.typeIntervention  !== undefined) r.type_intervention  = x.typeIntervention;
+  if (x.photos            !== undefined) r.photos             = JSON.stringify(x.photos || []);
+  return r;
+}
+
+function dbToApp(r) {
+  const { zone, equipement } = unpackZone(r.zone);
+  let photos = [];
+  try { photos = JSON.parse(r.photos || '[]'); } catch(e) {}
+  return {
+    id:               r.id,
+    ref:              r.ref,
+    dateCreation:     r.date_creation,
+    dateModification: r.date_modification,
+    declarant:        r.declarant,
+    zone, equipement,
+    description:      r.description,
+    priorite:         r.priorite,
+    statut:           r.statut,
+    technicien:       r.technicien       || '',
+    actionRealisee:   r.action_realisee  || '',
+    dateCloture:      r.date_cloture     || null,
+    commentaireFinal: r.commentaire_final || '',
+    observation:      r.observation      || '',
+    typeIntervention: r.type_intervention || 'Correctif',
+    photos,
+  };
+}
+
+/* ============================================================
+   4. CONVERSION — PRÉVENTIF
+   ============================================================ */
+function prevAppToDB(x) {
+  const r = {};
+  if (x.id                  !== undefined) r.id                   = x.id;
+  if (x.dateCreation        !== undefined) r.date_creation        = x.dateCreation;
+  if (x.dateModification    !== undefined) r.date_modification    = x.dateModification;
+  if (x.equipement          !== undefined) r.equipement           = x.equipement;
+  if (x.zone                !== undefined) r.zone                 = x.zone;
+  if (x.description         !== undefined) r.description          = x.description;
+  if (x.frequence           !== undefined) r.frequence            = x.frequence;
+  if (x.derniereRealisation !== undefined) r.derniere_realisation = x.derniereRealisation || null;
+  if (x.prochaineEcheance   !== undefined) r.prochaine_echeance   = x.prochaineEcheance   || null;
+  if (x.technicien          !== undefined) r.technicien           = x.technicien;
+  if (x.statut              !== undefined) r.statut               = x.statut;
+  if (x.observation         !== undefined) r.observation          = x.observation;
+  return r;
+}
+
+function prevDbToApp(r) {
+  return {
+    id:                  r.id,
+    dateCreation:        r.date_creation,
+    dateModification:    r.date_modification,
+    equipement:          r.equipement          || '',
+    zone:                r.zone                || '',
+    description:         r.description         || '',
+    frequence:           r.frequence           || 'Mensuel',
+    derniereRealisation: r.derniere_realisation || null,
+    prochaineEcheance:   r.prochaine_echeance   || null,
+    technicien:          r.technicien           || '',
+    statut:              r.statut              || 'À faire',
+    observation:         r.observation          || '',
+  };
+}
+
+/* ============================================================
+   5. CACHES
+   ============================================================ */
+let _cache = [];
+let _prevCache = [];
+
+async function refreshCache() {
+  setLoading(true);
+  try {
+    _cache = await Store.getAll();
+    updateConnStatus(true);
+  } catch(e) {
+    console.error('Erreur chargement :', e);
+    updateConnStatus(false);
+    toast('Erreur de connexion à la base de données');
+  } finally {
+    setLoading(false);
+    render();
+  }
+}
+
+async function refreshPrevCache() {
+  setPrevLoading(true);
+  try { _prevCache = await PrevStore.getAll(); }
+  catch(e) { console.error(e); }
+  finally { setPrevLoading(false); renderPrev(); }
+}
+
+const isMobile = () => window.innerWidth <= 760;
+
+function setLoading(v) {
+  document.getElementById('listLoading').classList.toggle('show', v);
+  document.getElementById('mainTable').style.display = v || isMobile() ? 'none' : '';
+}
+function setPrevLoading(v) {
+  document.getElementById('prevLoading').classList.toggle('show', v);
+  document.getElementById('prevTable').style.display = v || isMobile() ? 'none' : '';
+}
+
+/* ============================================================
+   6. TEMPS RÉEL
+   ============================================================ */
+function setupRealtime() {
+  if (!sb) return;
+  sb.channel('gmao-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'interventions' }, payload => {
+      if (payload.eventType === 'INSERT') {
+        const item = dbToApp(payload.new);
+        if (!_cache.find(x => x.id === item.id)) _cache.unshift(item);
+      } else if (payload.eventType === 'UPDATE') {
+        const item = dbToApp(payload.new);
+        const idx = _cache.findIndex(x => x.id === item.id);
+        if (idx >= 0) _cache[idx] = item; else _cache.unshift(item);
+      } else if (payload.eventType === 'DELETE') {
+        _cache = _cache.filter(x => x.id !== payload.old.id);
+      }
+      render();
+      if (payload.eventType !== 'DELETE') {
+        setTimeout(() => {
+          const row = document.querySelector(`#tbody [data-rowid="${payload.new.id}"]`);
+          if (row) row.classList.add('updated-flash');
+        }, 50);
+      }
+    })
+    .subscribe(status => updateConnStatus(status === 'SUBSCRIBED'));
+
+  sb.channel('gmao-prev-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'preventif' }, payload => {
+      if (payload.eventType === 'INSERT') {
+        const item = prevDbToApp(payload.new);
+        if (!_prevCache.find(x => x.id === item.id)) _prevCache.push(item);
+      } else if (payload.eventType === 'UPDATE') {
+        const item = prevDbToApp(payload.new);
+        const idx = _prevCache.findIndex(x => x.id === item.id);
+        if (idx >= 0) _prevCache[idx] = item; else _prevCache.push(item);
+      } else if (payload.eventType === 'DELETE') {
+        _prevCache = _prevCache.filter(x => x.id !== payload.old.id);
+      }
+      renderPrev();
+    })
+    .subscribe();
+}
+
+/* ============================================================
+   7. INDICATEUR DE CONNEXION
+   ============================================================ */
+function updateConnStatus(online) {
+  const el    = document.getElementById('connStatus');
+  const label = document.getElementById('connLabel');
+  el.classList.toggle('online',  online);
+  el.classList.toggle('offline', !online);
+  label.textContent = online ? 'En ligne' : 'Hors ligne';
+}
+
+/* ============================================================
+   8. UTILITAIRES
+   ============================================================ */
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const p = n => String(n).padStart(2,'0');
+  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function fmtDateStacked(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const p = n => String(n).padStart(2,'0');
+  return `<span class="d-day">${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}</span>`
+       + `<span class="d-time">${p(d.getHours())}:${p(d.getMinutes())}</span>`;
+}
+
+function fmtDateShort(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T00:00:00');
+  const p = n => String(n).padStart(2,'0');
+  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`;
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function statutBadge(s) {
+  const map = { 'Ouvert':'b-open', 'En cours':'b-progress', 'Clôturé':'b-closed' };
+  return `<span class="badge ${map[s]||''}">${esc(s)}</span>`;
+}
+function prioriteBadge(p) {
+  const map = { 'Basse':'b-pr-basse','Normale':'b-pr-normale','Haute':'b-pr-haute','Urgente':'b-pr-urgente','Priorité de la semaine':'b-pr-semaine' };
+  if (p === 'Priorité de la semaine') {
+    return `<span class="badge ${map[p]}"><span class="prio-line">Priorité de</span><span class="prio-line">la semaine</span></span>`;
+  }
+  return `<span class="badge ${map[p]||''}">${esc(p)}</span>`;
+}
+function typeBadge(t) {
+  const map = { 'Correctif':'b-correctif','Préventif':'b-preventif','Amélioratif':'b-amelioratif' };
+  return `<span class="badge ${map[t]||'b-correctif'}">${esc(t||'Correctif')}</span>`;
+}
+function prevStatutBadge(s) {
+  const map = { 'À faire':'b-prev-afaire','Réalisé':'b-prev-fait','En retard':'b-prev-retard' };
+  return `<span class="badge ${map[s]||''}">${esc(s)}</span>`;
+}
+
+function echeanceLabel(dateStr) {
+  if (!dateStr) return '<span style="color:var(--ink-soft)">—</span>';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(dateStr + 'T00:00:00');
+  const diff = Math.round((d - today) / (1000*60*60*24));
+  const label = fmtDateShort(dateStr);
+  if (diff < 0)  return `<span class="echeance-retard">⚠ ${label}</span>`;
+  if (diff <= 7) return `<span class="echeance-proche">⏰ ${label}</span>`;
+  return `<span class="echeance-ok">✓ ${label}</span>`;
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+/* ============================================================
+   9. FILTRAGE + RENDU — INTERVENTIONS
+   ============================================================ */
+const fSearch   = document.getElementById('fSearch');
+const fStatut   = document.getElementById('fStatut');
+const fType     = document.getElementById('fType');
+const fPriorite = document.getElementById('fPriorite');
+const fZone     = document.getElementById('fZone');
+const fDate     = document.getElementById('fDate');
+const tbody     = document.getElementById('tbody');
+const statsEl   = document.getElementById('stats');
+const emptyState= document.getElementById('emptyState');
+const intCards  = document.getElementById('intCards');
+
+function getFiltered() {
+  let list = [..._cache];
+  const q = fSearch.value.trim().toLowerCase();
+  if (q) list = list.filter(x =>
+    (x.zone+' '+x.equipement+' '+x.description+' '+x.declarant+' '+x.ref+' '+(x.typeIntervention||'')).toLowerCase().includes(q));
+  if (fStatut.value)   list = list.filter(x => x.statut === fStatut.value);
+  if (fType.value)     list = list.filter(x => (x.typeIntervention || 'Correctif') === fType.value);
+  if (fPriorite.value) list = list.filter(x => x.priorite === fPriorite.value);
+  if (fZone.value)     list = list.filter(x => x.zone === fZone.value);
+  if (fDate.value) {
+    const from = new Date(fDate.value + 'T00:00:00');
+    list = list.filter(x => new Date(x.dateCreation) >= from);
+  }
+  return list;
+}
+
+const TRASH_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+  <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+</svg>`;
+
+function render() {
+  const all = _cache;
+  const count = s => all.filter(x => x.statut === s).length;
+  statsEl.innerHTML = `
+    <div class="stat-card s-total"><div class="num mono">${all.length}</div><div class="lbl">Total</div></div>
+    <div class="stat-card s-open"><div class="num mono">${count('Ouvert')}</div><div class="lbl">Ouverts</div></div>
+    <div class="stat-card s-progress"><div class="num mono">${count('En cours')}</div><div class="lbl">En cours</div></div>
+    <div class="stat-card s-closed"><div class="num mono">${count('Clôturé')}</div><div class="lbl">Clôturés</div></div>
+  `;
+  document.getElementById('tabCountInt').textContent = all.length;
+
+  const list = getFiltered();
+  tbody.innerHTML = '';
+  intCards.innerHTML = '';
+  emptyState.style.display = list.length ? 'none' : 'block';
+
+  list.forEach(x => {
+    const photoInfo = (x.photos && x.photos.length > 0)
+      ? `<span class="photo-badge">📷 ${x.photos.length}</span>` : '';
+
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-rowid', x.id);
+    tr.innerHTML = `
+      <td><span class="cell-id">${esc(x.ref)}</span></td>
+      <td><span class="cell-date">${fmtDateStacked(x.dateCreation)}</span></td>
+      <td>${x.zone ? `<span class="zone-badge">${esc(x.zone)}</span>` : '—'}</td>
+      <td class="cell-equip">
+        <div class="eq-name">${esc(x.equipement) || '—'}</div>
+        <div class="eq-prob">
+          <span class="eq-text">${esc(x.description)}</span>
+        </div>
+        ${photoInfo ? `<div class="eq-meta">${photoInfo}</div>` : ''}
+      </td>
+      <td>${typeBadge(x.typeIntervention)}</td>
+      <td>${esc(x.declarant)}</td>
+      <td>${prioriteBadge(x.priorite)}</td>
+      <td>${statutBadge(x.statut)}</td>
+      <td>
+        <div class="row-actions">
+          <button class="btn btn-light btn-sm" data-view="${x.id}">Voir</button>
+          <button class="btn btn-light btn-sm" data-edit="${x.id}">Modifier</button>
+          ${x.statut !== 'Clôturé'
+            ? `<button class="btn btn-primary btn-sm" data-cloturer="${x.id}">Clôturer</button>`
+            : ''}
+          <button class="btn-trash" data-delete="${x.id}" data-type="intervention" title="Supprimer">${TRASH_ICON}</button>
+        </div>
+      </td>`;
+    tbody.appendChild(tr);
+
+    const card = document.createElement('div');
+    card.className = 'int-card';
+    card.setAttribute('data-rowid', x.id);
+    card.innerHTML = `
+      <div class="int-card-head">
+        <span class="int-card-ref">${esc(x.ref)}</span>
+        <div class="int-card-badges">
+          ${x.zone ? `<span class="zone-badge">${esc(x.zone)}</span>` : ''}
+          ${typeBadge(x.typeIntervention)}
+          ${prioriteBadge(x.priorite)}
+          ${statutBadge(x.statut)}
+        </div>
+      </div>
+      <div class="int-card-body">
+        ${x.equipement ? `<div style="font-weight:600;font-size:.88rem;">${esc(x.equipement)}</div>` : ''}
+        <div class="int-card-desc">${esc(x.description)}</div>
+        <div class="int-card-meta">
+          <span>👤 ${esc(x.declarant)}</span>
+          <span>🕐 ${fmtDate(x.dateCreation)}</span>
+          ${x.photos && x.photos.length ? `<span>📷 ${x.photos.length} photo${x.photos.length > 1 ? 's' : ''}</span>` : ''}
+        </div>
+      </div>
+      <div class="int-card-foot">
+        <button class="btn btn-light btn-sm" data-view="${x.id}">Voir</button>
+        <button class="btn btn-light btn-sm" data-edit="${x.id}">Modifier</button>
+        ${x.statut !== 'Clôturé'
+          ? `<button class="btn btn-primary btn-sm" data-cloturer="${x.id}">Clôturer</button>`
+          : ''}
+        <button class="btn-trash" data-delete="${x.id}" data-type="intervention" title="Supprimer">${TRASH_ICON}</button>
+      </div>`;
+    intCards.appendChild(card);
+  });
+}
+
+/* ============================================================
+   10. FILTRAGE + RENDU — PRÉVENTIF
+   ============================================================ */
+const pfSearch   = document.getElementById('pfSearch');
+const pfStatut   = document.getElementById('pfStatut');
+const pfFrequence= document.getElementById('pfFrequence');
+const pfZone     = document.getElementById('pfZone');
+const prevTbody  = document.getElementById('prevTbody');
+const prevCards  = document.getElementById('prevCards');
+
+function getPrevFiltered() {
+  let list = [..._prevCache];
+  const q = pfSearch.value.trim().toLowerCase();
+  if (q) list = list.filter(x =>
+    (x.equipement+' '+x.description+' '+x.technicien+' '+x.zone).toLowerCase().includes(q));
+  if (pfStatut.value)    list = list.filter(x => x.statut === pfStatut.value);
+  if (pfFrequence.value) list = list.filter(x => x.frequence === pfFrequence.value);
+  if (pfZone.value)      list = list.filter(x => x.zone === pfZone.value);
+  return list;
+}
+
+function renderPrev() {
+  const all = _prevCache;
+  const countP = s => all.filter(x => x.statut === s).length;
+  document.getElementById('prevStats').innerHTML = `
+    <div class="stat-card s-prev-afaire"><div class="num mono">${countP('À faire')}</div><div class="lbl">À faire</div></div>
+    <div class="stat-card s-prev-fait"><div class="num mono">${countP('Réalisé')}</div><div class="lbl">Réalisés</div></div>
+    <div class="stat-card s-prev-retard"><div class="num mono">${countP('En retard')}</div><div class="lbl">En retard</div></div>
+  `;
+  document.getElementById('tabCountPrev').textContent = all.length;
+
+  const list = getPrevFiltered();
+  prevTbody.innerHTML = '';
+  prevCards.innerHTML = '';
+  document.getElementById('prevEmptyState').style.display = list.length ? 'none' : 'block';
+
+  list.forEach(x => {
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-rowid', x.id);
+    tr.innerHTML = `
+      <td>
+        <strong>${esc(x.equipement)}</strong>
+        ${x.technicien ? `<div style="font-size:.78rem;color:var(--ink-soft);margin-top:2px">👤 ${esc(x.technicien)}</div>` : ''}
+      </td>
+      <td>${x.zone ? `<span class="zone-badge">${esc(x.zone)}</span>` : '—'}</td>
+      <td class="cell-desc">${esc(x.description)}</td>
+      <td><span class="mono" style="font-size:.82rem">${esc(x.frequence)}</span></td>
+      <td>
+        <div style="font-size:.78rem;color:var(--ink-soft)">Dernière : ${fmtDateShort(x.derniereRealisation)}</div>
+        <div style="margin-top:2px">${echeanceLabel(x.prochaineEcheance)}</div>
+      </td>
+      <td>${prevStatutBadge(x.statut)}</td>
+      <td>
+        <div class="row-actions">
+          <button class="btn btn-light btn-sm" data-prev-view="${x.id}">Voir</button>
+          <button class="btn btn-light btn-sm" data-prev-edit="${x.id}">Modifier</button>
+          ${x.statut !== 'Réalisé'
+            ? `<button class="btn btn-success btn-sm" data-prev-done="${x.id}">✓ Réalisé</button>`
+            : ''}
+          <button class="btn-trash" data-delete="${x.id}" data-type="preventif" title="Supprimer">${TRASH_ICON}</button>
+        </div>
+      </td>`;
+    prevTbody.appendChild(tr);
+
+    const card = document.createElement('div');
+    card.className = 'int-card';
+    card.setAttribute('data-rowid', x.id);
+    card.innerHTML = `
+      <div class="int-card-head">
+        ${x.zone ? `<span class="zone-badge">${esc(x.zone)}</span>` : ''}
+        <div class="int-card-badges">
+          <span class="mono" style="font-size:.75rem;color:var(--ink-soft)">${esc(x.frequence)}</span>
+          ${prevStatutBadge(x.statut)}
+        </div>
+      </div>
+      <div class="int-card-body">
+        <div style="font-weight:700">${esc(x.equipement)}</div>
+        <div class="int-card-desc">${esc(x.description)}</div>
+        <div class="int-card-meta">
+          ${x.technicien ? `<span>👤 ${esc(x.technicien)}</span>` : ''}
+          <span>📅 Échéance : ${echeanceLabel(x.prochaineEcheance)}</span>
+        </div>
+      </div>
+      <div class="int-card-foot">
+        <button class="btn btn-light btn-sm" data-prev-view="${x.id}">Voir</button>
+        <button class="btn btn-light btn-sm" data-prev-edit="${x.id}">Modifier</button>
+        ${x.statut !== 'Réalisé'
+          ? `<button class="btn btn-success btn-sm" data-prev-done="${x.id}">✓ Réalisé</button>`
+          : ''}
+        <button class="btn-trash" data-delete="${x.id}" data-type="preventif" title="Supprimer">${TRASH_ICON}</button>
+      </div>`;
+    prevCards.appendChild(card);
+  });
+}
+
+/* ============================================================
+   11. GESTION DES PHOTOS — BASE64 LOCAL
+   ============================================================ */
+let _pendingPhotos = [];   // { dataUrl, name }[] — photos en attente d'enregistrement
+let _existingPhotos = [];  // URLs ou base64 déjà sauvegardées
+
+function initPhotoUpload() {
+  const dropZone = document.getElementById('photoDropZone');
+  const input    = document.getElementById('photoInput');
+
+  dropZone.addEventListener('click', () => input.click());
+
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    handleFiles(e.dataTransfer.files);
+  });
+
+  input.addEventListener('change', () => {
+    handleFiles(input.files);
+    input.value = '';
+  });
+}
+
+function handleFiles(files) {
+  Array.from(files).forEach(file => {
+    if (!file.type.startsWith('image/')) { toast('Fichier non supporté : ' + file.name); return; }
+    if (file.size > 5 * 1024 * 1024) { toast('Image trop lourde (max 5 Mo) : ' + file.name); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      _pendingPhotos.push({ dataUrl: e.target.result, name: file.name });
+      renderPhotoPreviews();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderPhotoPreviews() {
+  const container = document.getElementById('photoPreviews');
+  container.innerHTML = '';
+
+  // Photos existantes
+  _existingPhotos.forEach((url, i) => {
+    const div = document.createElement('div');
+    div.className = 'photo-thumb';
+    div.innerHTML = `
+      <img src="${esc(url)}" alt="Photo ${i+1}">
+      <button class="photo-thumb-remove" data-existing="${i}" title="Retirer">×</button>
+    `;
+    container.appendChild(div);
+  });
+
+  // Photos nouvelles (en attente)
+  _pendingPhotos.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'photo-thumb';
+    div.innerHTML = `
+      <img src="${p.dataUrl}" alt="${esc(p.name)}">
+      <button class="photo-thumb-remove" data-pending="${i}" title="Retirer">×</button>
+    `;
+    container.appendChild(div);
+  });
+
+  // Délégation suppression
+  container.querySelectorAll('.photo-thumb-remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (btn.dataset.existing !== undefined) {
+        _existingPhotos.splice(parseInt(btn.dataset.existing), 1);
+      } else if (btn.dataset.pending !== undefined) {
+        _pendingPhotos.splice(parseInt(btn.dataset.pending), 1);
+      }
+      renderPhotoPreviews();
+    });
+  });
+}
+
+function resetPhotoState() {
+  _pendingPhotos  = [];
+  _existingPhotos = [];
+  renderPhotoPreviews();
+}
+
+function getAllPhotos() {
+  return [..._existingPhotos, ..._pendingPhotos.map(p => p.dataUrl)];
+}
+
+/* ============================================================
+   12. MODALE CRÉER / MODIFIER INTERVENTION
+   ============================================================ */
+const modalEdit = document.getElementById('modalEdit');
+
+function openNew() {
+  document.getElementById('editTitle').textContent = 'Nouvelle intervention';
+  document.getElementById('eId').value = '';
+  document.getElementById('eRef').value = '';
+  document.getElementById('eDeclarant').value = '';
+  document.getElementById('eZone').value = '';
+  document.getElementById('eEquipement').value = '';
+  document.getElementById('eDescription').value = '';
+  document.getElementById('ePriorite').value    = 'Normale';
+  document.getElementById('eStatut').value      = 'Ouvert';
+  document.getElementById('eObservation').value = '';
+  document.getElementById('eTypeIntervention').value = 'Correctif';
+  document.getElementById('eDateHint').textContent =
+    'La date et l\'heure de création seront enregistrées automatiquement.';
+  resetPhotoState();
+  showModal(modalEdit);
+}
+
+function openEdit(id) {
+  const x = _cache.find(i => i.id === id);
+  if (!x) return;
+  document.getElementById('editTitle').textContent = 'Modifier — ' + x.ref;
+  document.getElementById('eId').value = x.id;
+  document.getElementById('eRef').value = x.ref;
+  document.getElementById('eDeclarant').value = x.declarant;
+  document.getElementById('eZone').value = x.zone;
+  document.getElementById('eEquipement').value = x.equipement;
+  document.getElementById('eDescription').value = x.description;
+  document.getElementById('ePriorite').value    = x.priorite;
+  document.getElementById('eStatut').value      = x.statut;
+  document.getElementById('eObservation').value = x.observation || '';
+  document.getElementById('eTypeIntervention').value = x.typeIntervention || 'Correctif';
+  document.getElementById('eDateHint').textContent =
+    'Créé le ' + fmtDate(x.dateCreation) +
+    (x.dateModification ? ' · modifié le ' + fmtDate(x.dateModification) : '');
+  // Charger photos existantes
+  _pendingPhotos  = [];
+  _existingPhotos = x.photos ? [...x.photos] : [];
+  renderPhotoPreviews();
+  showModal(modalEdit);
+}
+
+document.getElementById('btnSave').addEventListener('click', async () => {
+  const id  = document.getElementById('eId').value;
+  const ref = document.getElementById('eRef').value.trim();
+  const data = {
+    ref,
+    declarant:         document.getElementById('eDeclarant').value.trim(),
+    zone:              document.getElementById('eZone').value,
+    equipement:        document.getElementById('eEquipement').value.trim(),
+    description:       document.getElementById('eDescription').value.trim(),
+    priorite:          document.getElementById('ePriorite').value,
+    statut:            document.getElementById('eStatut').value,
+    observation:       document.getElementById('eObservation').value.trim(),
+    typeIntervention:  document.getElementById('eTypeIntervention').value,
+    photos:            getAllPhotos(),
+  };
+
+  if (!ref || !data.declarant || !data.zone || !data.description) {
+    toast('Merci de remplir les champs obligatoires (*)');
+    return;
+  }
+
+  const btn = document.getElementById('btnSave');
+  btn.disabled = true;
+
+  if (id) {
+    const updated = await Store.update(id, data);
+    if (updated) {
+      const idx = _cache.findIndex(x => x.id === id);
+      if (idx >= 0) _cache[idx] = updated;
+      toast('Intervention mise à jour ✓');
+    } else { toast('Erreur lors de la mise à jour'); }
+  } else {
+    const item = await Store.add({
+      technicien: '', actionRealisee: '', dateCloture: null, commentaireFinal: '',
+      dateCreation: new Date().toISOString(),
+      ...data,
+    });
+    if (item) { _cache.unshift(item); toast('Intervention enregistrée ✓'); }
+    else { toast('Erreur lors de l\'enregistrement'); }
+  }
+
+  btn.disabled = false;
+  hideModal(modalEdit);
+  render();
+});
+
+/* ============================================================
+   13. MODALE CLÔTURE
+   ============================================================ */
+const modalClose = document.getElementById('modalClose');
+
+function openClose(id) {
+  const x = _cache.find(i => i.id === id);
+  if (!x) return;
+  document.getElementById('cId').value = x.id;
+  document.getElementById('cContext').textContent =
+    `${x.ref} · ${x.zone}${x.equipement ? ' / ' + x.equipement : ''} — ${x.description}`;
+  document.getElementById('cTechnicien').value = x.technicien || '';
+  document.getElementById('cAction').value = x.actionRealisee || '';
+  document.getElementById('cComment').value = x.commentaireFinal || '';
+  showModal(modalClose);
+}
+
+document.getElementById('btnConfirmClose').addEventListener('click', async () => {
+  const id             = document.getElementById('cId').value;
+  const technicien     = document.getElementById('cTechnicien').value.trim();
+  const actionRealisee = document.getElementById('cAction').value.trim();
+
+  if (!technicien || !actionRealisee) {
+    toast('Indiquez le technicien et l\'action réalisée');
+    return;
+  }
+
+  const btn = document.getElementById('btnConfirmClose');
+  btn.disabled = true;
+
+  const updated = await Store.update(id, {
+    statut: 'Clôturé', technicien, actionRealisee,
+    commentaireFinal: document.getElementById('cComment').value.trim(),
+    dateCloture: new Date().toISOString()
+  });
+
+  btn.disabled = false;
+
+  if (updated) {
+    const idx = _cache.findIndex(x => x.id === id);
+    if (idx >= 0) _cache[idx] = updated;
+    toast('Intervention clôturée ✓');
+  } else { toast('Erreur lors de la clôture'); }
+
+  hideModal(modalClose);
+  render();
+});
+
+/* ============================================================
+   14. MODALE DÉTAIL INTERVENTION
+   ============================================================ */
+const modalView = document.getElementById('modalView');
+
+function openView(id) {
+  const x = _cache.find(i => i.id === id);
+  if (!x) return;
+  const row = (label, val) => `<div class="field"><label>${label}</label><div>${val}</div></div>`;
+
+  const photosHtml = (x.photos && x.photos.length > 0)
+    ? `<div class="field"><label>Photos (${x.photos.length})</label>
+         <div class="photo-gallery">
+           ${x.photos.map((url, i) =>
+             `<a href="${esc(url)}" target="_blank" title="Voir photo ${i+1}"><img src="${esc(url)}" alt="Photo ${i+1}"></a>`
+           ).join('')}
+         </div>
+       </div>` : '';
+
+  document.getElementById('viewBody').innerHTML = `
+    ${row('N° de demande', `<span class="mono">${esc(x.ref)}</span>`)}
+    <div class="form-grid">
+      ${row('Statut', statutBadge(x.statut))}
+      ${row('Type', typeBadge(x.typeIntervention))}
+    </div>
+    <div class="form-grid">
+      ${row('Priorité', prioriteBadge(x.priorite))}
+      ${row('Créé le', `<span class="mono">${fmtDate(x.dateCreation)}</span>`)}
+    </div>
+    ${x.dateModification ? row('Modifié le', `<span class="mono">${fmtDate(x.dateModification)}</span>`) : ''}
+    ${row('Déclarant', esc(x.declarant))}
+    <div class="form-grid">
+      ${row('Zone', x.zone ? `<span class="zone-badge">${esc(x.zone)}</span>` : '—')}
+      ${row('Équipement', esc(x.equipement) || '—')}
+    </div>
+    ${row('Description du problème', esc(x.description))}
+    ${x.observation ? row('Observation maintenance', esc(x.observation)) : ''}
+    ${photosHtml}
+    ${x.statut === 'Clôturé' ? `
+      <hr style="border:none;border-top:1px solid var(--line);">
+      ${row('Technicien', esc(x.technicien))}
+      ${row('Action réalisée', esc(x.actionRealisee))}
+      ${row('Commentaire final', esc(x.commentaireFinal) || '—')}
+      ${row('Clôturé le', `<span class="mono">${fmtDate(x.dateCloture)}</span>`)}
+    ` : ''}
+    <div style="display:flex;gap:10px;margin-top:6px;">
+      <button class="btn btn-light btn-sm" data-edit="${x.id}" data-close>Modifier</button>
+      <button class="btn btn-danger btn-sm" data-delete="${x.id}" data-type="intervention">Supprimer</button>
+    </div>
+  `;
+  showModal(modalView);
+}
+
+/* ============================================================
+   15. MODALE CRÉER / MODIFIER PRÉVENTIF
+   ============================================================ */
+const modalPrev = document.getElementById('modalPrev');
+
+function openNewPrev() {
+  document.getElementById('prevEditTitle').textContent = 'Nouvelle tâche préventive';
+  document.getElementById('pId').value = '';
+  document.getElementById('pEquipement').value = '';
+  document.getElementById('pZone').value = '';
+  document.getElementById('pDescription').value = '';
+  document.getElementById('pFrequence').value = 'Mensuel';
+  document.getElementById('pTechnicien').value = '';
+  document.getElementById('pDerniereRealisation').value = '';
+  document.getElementById('pProchaineEcheance').value = '';
+  document.getElementById('pStatut').value = 'À faire';
+  document.getElementById('pObservation').value = '';
+  showModal(modalPrev);
+}
+
+function openEditPrev(id) {
+  const x = _prevCache.find(i => i.id === id);
+  if (!x) return;
+  document.getElementById('prevEditTitle').textContent = 'Modifier — ' + x.equipement;
+  document.getElementById('pId').value = x.id;
+  document.getElementById('pEquipement').value = x.equipement;
+  document.getElementById('pZone').value = x.zone;
+  document.getElementById('pDescription').value = x.description;
+  document.getElementById('pFrequence').value = x.frequence;
+  document.getElementById('pTechnicien').value = x.technicien;
+  document.getElementById('pDerniereRealisation').value = x.derniereRealisation || '';
+  document.getElementById('pProchaineEcheance').value = x.prochaineEcheance || '';
+  document.getElementById('pStatut').value = x.statut;
+  document.getElementById('pObservation').value = x.observation;
+  showModal(modalPrev);
+}
+
+document.getElementById('btnSavePrev').addEventListener('click', async () => {
+  const id   = document.getElementById('pId').value;
+  const data = {
+    equipement:          document.getElementById('pEquipement').value.trim(),
+    zone:                document.getElementById('pZone').value,
+    description:         document.getElementById('pDescription').value.trim(),
+    frequence:           document.getElementById('pFrequence').value,
+    technicien:          document.getElementById('pTechnicien').value.trim(),
+    derniereRealisation: document.getElementById('pDerniereRealisation').value || null,
+    prochaineEcheance:   document.getElementById('pProchaineEcheance').value || null,
+    statut:              document.getElementById('pStatut').value,
+    observation:         document.getElementById('pObservation').value.trim(),
+  };
+
+  if (!data.equipement || !data.description) {
+    toast('Merci de renseigner l\'équipement et la description (*)');
+    return;
+  }
+
+  const btn = document.getElementById('btnSavePrev');
+  btn.disabled = true;
+
+  if (id) {
+    const updated = await PrevStore.update(id, data);
+    if (updated) {
+      const idx = _prevCache.findIndex(x => x.id === id);
+      if (idx >= 0) _prevCache[idx] = updated;
+      toast('Tâche mise à jour ✓');
+    } else { toast('Erreur lors de la mise à jour'); }
+  } else {
+    const item = await PrevStore.add({ dateCreation: new Date().toISOString(), ...data });
+    if (item) { _prevCache.push(item); toast('Tâche enregistrée ✓'); }
+    else { toast('Erreur lors de l\'enregistrement'); }
+  }
+
+  btn.disabled = false;
+  hideModal(modalPrev);
+  renderPrev();
+});
+
+/* ============================================================
+   16. MODALE DÉTAIL PRÉVENTIF
+   ============================================================ */
+function openPrevView(id) {
+  const x = _prevCache.find(i => i.id === id);
+  if (!x) return;
+  const row = (label, val) => `<div class="field"><label>${label}</label><div>${val}</div></div>`;
+  document.getElementById('prevViewBody').innerHTML = `
+    <div class="form-grid">
+      ${row('Équipement', `<strong>${esc(x.equipement)}</strong>`)}
+      ${row('Zone', x.zone ? `<span class="zone-badge">${esc(x.zone)}</span>` : '—')}
+    </div>
+    ${row('Description', esc(x.description))}
+    <div class="form-grid">
+      ${row('Fréquence', `<span class="mono">${esc(x.frequence)}</span>`)}
+      ${row('Statut', prevStatutBadge(x.statut))}
+    </div>
+    <div class="form-grid">
+      ${row('Dernière réalisation', fmtDateShort(x.derniereRealisation))}
+      ${row('Prochaine échéance', echeanceLabel(x.prochaineEcheance))}
+    </div>
+    ${row('Technicien', esc(x.technicien) || '—')}
+    ${x.observation ? row('Observation', esc(x.observation)) : ''}
+    <div style="display:flex;gap:10px;margin-top:6px;">
+      <button class="btn btn-light btn-sm" data-prev-edit="${x.id}" data-close>Modifier</button>
+      <button class="btn btn-danger btn-sm" data-delete="${x.id}" data-type="preventif">Supprimer</button>
+    </div>
+  `;
+  showModal(document.getElementById('modalPrevView'));
+}
+
+/* Marquer "Réalisé" rapidement */
+async function markPrevDone(id) {
+  const x = _prevCache.find(i => i.id === id);
+  if (!x) return;
+  const today = new Date().toISOString().split('T')[0];
+  const updated = await PrevStore.update(id, {
+    statut: 'Réalisé',
+    derniereRealisation: today,
+  });
+  if (updated) {
+    const idx = _prevCache.findIndex(i => i.id === id);
+    if (idx >= 0) _prevCache[idx] = updated;
+    toast('Tâche marquée comme réalisée ✓');
+    renderPrev();
+  } else { toast('Erreur lors de la mise à jour'); }
+}
+
+/* ============================================================
+   17. EXPORT CSV
+   ============================================================ */
+document.getElementById('btnExport').addEventListener('click', () => {
+  const headers = ['N° Demande','Date création','Zone','Équipement','Type','Priorité','Statut','Déclarant','Description','Observation','Technicien','Action réalisée','Commentaire final','Date clôture'];
+  const rows = _cache.map(x => [
+    x.ref, fmtDate(x.dateCreation), x.zone, x.equipement, x.typeIntervention || 'Correctif',
+    x.priorite, x.statut, x.declarant, x.description, x.observation,
+    x.technicien, x.actionRealisee, x.commentaireFinal, x.dateCloture ? fmtDate(x.dateCloture) : ''
+  ]);
+
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';'))
+    .join('\n');
+
+  const BOM = '﻿'; // BOM pour Excel (UTF-8)
+  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const date = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `GMAO_interventions_${date}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Export CSV téléchargé ✓');
+});
+
+/* ============================================================
+   18. SUPPRESSION
+   ============================================================ */
+let _pendingDeleteId   = null;
+let _pendingDeleteType = null; // 'intervention' | 'preventif'
+
+function openConfirmDelete(id, type) {
+  _pendingDeleteId   = id;
+  _pendingDeleteType = type;
+
+  if (type === 'preventif') {
+    const x = _prevCache.find(i => i.id === id);
+    document.getElementById('confirmTitle').textContent = 'Supprimer cette tâche ?';
+    document.getElementById('confirmDesc').textContent =
+      x ? `${x.equipement} — ${x.description.substring(0, 60)}${x.description.length > 60 ? '…' : ''}` : 'Cette action est irréversible.';
+  } else {
+    const x = _cache.find(i => i.id === id);
+    document.getElementById('confirmTitle').textContent = 'Supprimer cette intervention ?';
+    document.getElementById('confirmDesc').textContent =
+      x ? `N° ${x.ref} — ${x.description.substring(0, 60)}${x.description.length > 60 ? '…' : ''}` : 'Cette action est irréversible.';
+  }
+  document.getElementById('confirmOverlay').classList.add('show');
+}
+
+document.getElementById('confirmCancel').addEventListener('click', () => {
+  _pendingDeleteId = null;
+  _pendingDeleteType = null;
+  document.getElementById('confirmOverlay').classList.remove('show');
+});
+
+document.getElementById('confirmOk').addEventListener('click', async () => {
+  if (!_pendingDeleteId) return;
+  const id   = _pendingDeleteId;
+  const type = _pendingDeleteType;
+  _pendingDeleteId   = null;
+  _pendingDeleteType = null;
+  document.getElementById('confirmOverlay').classList.remove('show');
+  document.querySelectorAll('.modal-overlay.show').forEach(hideModal);
+
+  if (type === 'preventif') {
+    await PrevStore.remove(id);
+    _prevCache = _prevCache.filter(x => x.id !== id);
+    renderPrev();
+    toast('Tâche supprimée');
+  } else {
+    await Store.remove(id);
+    _cache = _cache.filter(x => x.id !== id);
+    render();
+    toast('Intervention supprimée');
+  }
+});
+
+/* ============================================================
+   19. MODALES — ouvrir / fermer
+   ============================================================ */
+function showModal(m) { m.classList.add('show'); }
+function hideModal(m) { m.classList.remove('show'); }
+
+document.querySelectorAll('.modal-overlay').forEach(ov => {
+  ov.addEventListener('click', e => {
+    const closeBtn = e.target.closest('[data-close]');
+    if (closeBtn) hideModal(ov);
+  });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay.show').forEach(hideModal);
+    document.getElementById('confirmOverlay').classList.remove('show');
+  }
+});
+
+/* ============================================================
+   20. ONGLETS
+   ============================================================ */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + tab).classList.add('active');
+
+    // Charger préventif au premier clic
+    if (tab === 'preventif' && _prevCache.length === 0) {
+      refreshPrevCache();
+    }
+  });
+});
+
+/* ============================================================
+   21. DÉLÉGATION DES CLICS
+   ============================================================ */
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+
+  // Interventions
+  if (btn.dataset.view)     { openView(btn.dataset.view); return; }
+  if (btn.dataset.edit)     { openEdit(btn.dataset.edit); return; }
+  if (btn.dataset.cloturer) { openClose(btn.dataset.cloturer); return; }
+
+  // Préventif
+  if (btn.dataset.prevView) { openPrevView(btn.dataset.prevView); return; }
+  if (btn.dataset.prevEdit) { openEditPrev(btn.dataset.prevEdit); return; }
+  if (btn.dataset.prevDone) { await markPrevDone(btn.dataset.prevDone); return; }
+
+  // Suppression
+  if (btn.dataset.delete) {
+    const type = btn.dataset.type || 'intervention';
+    openConfirmDelete(btn.dataset.delete, type);
+    return;
+  }
+});
+
+/* ============================================================
+   22. FILTRES INTERVENTIONS
+   ============================================================ */
+document.getElementById('btnNew').addEventListener('click', openNew);
+document.getElementById('btnNewPrev').addEventListener('click', openNewPrev);
+
+[fSearch].forEach(el => el.addEventListener('input', render));
+[fStatut, fType, fPriorite, fZone, fDate].forEach(el => el.addEventListener('change', render));
+document.getElementById('btnResetFilters').addEventListener('click', () => {
+  fSearch.value = ''; fStatut.value = ''; fType.value = '';
+  fPriorite.value = ''; fZone.value = ''; fDate.value = '';
+  render();
+});
+
+/* Filtres préventif */
+[pfSearch].forEach(el => el.addEventListener('input', renderPrev));
+[pfStatut, pfFrequence, pfZone].forEach(el => el.addEventListener('change', renderPrev));
+document.getElementById('btnResetPrevFilters').addEventListener('click', () => {
+  pfSearch.value = ''; pfStatut.value = ''; pfFrequence.value = ''; pfZone.value = '';
+  renderPrev();
+});
+
+/* ============================================================
+   23. AUTHENTIFICATION & LANCEMENT
+   ============================================================ */
+initPhotoUpload();
+
+const loginOverlay = document.getElementById('loginOverlay');
+const loginForm    = document.getElementById('loginForm');
+const loginEmail   = document.getElementById('loginEmail');
+const loginPwd     = document.getElementById('loginPwd');
+const loginError   = document.getElementById('loginError');
+const loginBtn     = document.getElementById('loginBtn');
+const btnLogout    = document.getElementById('btnLogout');
+let _appStarted = false;
+
+function showLogin(show) {
+  loginOverlay.classList.toggle('show', show);
+  document.body.classList.toggle('locked', show);
+  if (btnLogout) btnLogout.style.display = show ? 'none' : '';
+}
+
+/* Démarre l'app une seule fois, après connexion réussie */
+function startApp() {
+  if (_appStarted) return;
+  _appStarted = true;
+  setupRealtime();
+  refreshCache();
+  if (typeof refreshPrevCache === 'function') refreshPrevCache();
+}
+
+/* Vérifie la session au chargement et écoute les changements d'état */
+async function initAuth() {
+  if (!configured || !sb) {        // App non configurée → ancien comportement
+    showLogin(false);
+    setLoading(false);
+    render();
+    return;
+  }
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { showLogin(false); startApp(); }
+  else         { showLogin(true);  setLoading(false); }
+
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (session) { showLogin(false); startApp(); }
+    else         { showLogin(true); }
+  });
+}
+
+/* Soumission du formulaire de connexion */
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  loginError.textContent = '';
+  loginBtn.disabled = true;
+  loginBtn.textContent = 'Connexion…';
+  const { error } = await sb.auth.signInWithPassword({
+    email: loginEmail.value.trim(),
+    password: loginPwd.value
+  });
+  loginBtn.disabled = false;
+  loginBtn.textContent = 'Se connecter';
+  loginPwd.value = '';
+  if (error) {
+    loginError.textContent = 'Identifiants incorrects. Réessaie.';
+  }
+});
+
+/* Déconnexion */
+if (btnLogout) btnLogout.addEventListener('click', async () => {
+  if (sb) await sb.auth.signOut();
+  location.reload();
+});
+
+initAuth();
+</script>
+</body>
+</html>

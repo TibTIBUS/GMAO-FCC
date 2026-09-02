@@ -1912,6 +1912,13 @@ document.getElementById('btnSave').addEventListener('click', async () => {
     return;
   }
 
+  const duplicate = _cache.find(x =>
+    x.ref && x.ref.trim().toLowerCase() === ref.toLowerCase() && String(x.id) !== String(id));
+  if (duplicate) {
+    toast(`Le n° "${ref}" est déjà utilisé par une autre intervention`);
+    return;
+  }
+
   const btn = document.getElementById('btnSave');
   btn.disabled = true;
 

@@ -250,6 +250,13 @@ thead th {
   padding: 12px 14px; background: var(--surface-alt);
   border-bottom: 2px solid var(--line); white-space: nowrap;
 }
+thead th[data-sort] { cursor: pointer; user-select: none; }
+thead th[data-sort]:hover { color: var(--ink); background: #efeee7; }
+thead th[data-sort] .sort-arrow { display: inline-block; width: 10px; opacity: .35; }
+thead th[data-sort].sort-asc .sort-arrow::after  { content: '▲'; }
+thead th[data-sort].sort-desc .sort-arrow::after { content: '▼'; }
+thead th[data-sort].sort-asc, thead th[data-sort].sort-desc { color: var(--accent); }
+thead th[data-sort].sort-asc .sort-arrow, thead th[data-sort].sort-desc .sort-arrow { opacity: 1; }
 tbody td { padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: .92rem; vertical-align: top; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:nth-child(even) { background: #faf9f6; }
@@ -747,14 +754,14 @@ tbody tr:hover { background: #fff5ec; }
         </colgroup>
         <thead>
           <tr>
-            <th>N°</th>
-            <th>Créé le</th>
-            <th>Zone</th>
-            <th>Équipement / Problème</th>
-            <th>Type</th>
-            <th>Déclarant</th>
-            <th>Priorité</th>
-            <th>Statut</th>
+            <th data-sort="ref">N° <span class="sort-arrow"></span></th>
+            <th data-sort="date">Créé le <span class="sort-arrow"></span></th>
+            <th data-sort="zone">Zone <span class="sort-arrow"></span></th>
+            <th data-sort="equipement">Équipement / Problème <span class="sort-arrow"></span></th>
+            <th data-sort="type">Type <span class="sort-arrow"></span></th>
+            <th data-sort="declarant">Déclarant <span class="sort-arrow"></span></th>
+            <th data-sort="priorite">Priorité <span class="sort-arrow"></span></th>
+            <th data-sort="statut">Statut <span class="sort-arrow"></span></th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -1527,7 +1534,39 @@ function getFiltered() {
     const from = new Date(fDate.value + 'T00:00:00');
     list = list.filter(x => new Date(x.dateCreation) >= from);
   }
-  return list;
+  return applySort(list);
+}
+
+/* ============================================================
+   9bis. TRI PAR COLONNE (clic sur les en-têtes du tableau)
+   ============================================================ */
+let sortState = { key: null, dir: 1 }; // dir: 1 = croissant, -1 = décroissant
+
+const PRIORITE_ORDER = ['Basse', 'Normale', 'Haute', 'Urgente', 'Priorité de la semaine'];
+const STATUT_ORDER   = ['Ouvert', 'En cours', 'Clôturé'];
+
+function sortValue(x, key) {
+  switch (key) {
+    case 'ref':        return x.ref || '';
+    case 'date':       return x.dateCreation ? new Date(x.dateCreation).getTime() : 0;
+    case 'zone':       return x.zone || '';
+    case 'equipement': return x.equipement || '';
+    case 'type':       return x.typeIntervention || 'Correctif';
+    case 'declarant':  return x.declarant || '';
+    case 'priorite':   return PRIORITE_ORDER.indexOf(x.priorite);
+    case 'statut':     return STATUT_ORDER.indexOf(x.statut);
+    default:           return '';
+  }
+}
+
+function applySort(list) {
+  if (!sortState.key) return list;
+  const { key, dir } = sortState;
+  return [...list].sort((a, b) => {
+    const va = sortValue(a, key), vb = sortValue(b, key);
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+    return String(va).localeCompare(String(vb), 'fr', { numeric: true, sensitivity: 'base' }) * dir;
+  });
 }
 
 const TRASH_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2275,6 +2314,19 @@ document.getElementById('btnNewPrev').addEventListener('click', openNewPrev);
 
 [fSearch].forEach(el => el.addEventListener('input', render));
 [fStatut, fType, fPriorite, fZone, fDate].forEach(el => el.addEventListener('change', render));
+
+/* Tri par clic sur les en-têtes du tableau interventions */
+document.querySelectorAll('#mainTable thead th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if (sortState.key === key) sortState.dir *= -1;
+    else { sortState.key = key; sortState.dir = 1; }
+    document.querySelectorAll('#mainTable thead th[data-sort]').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+    th.classList.add(sortState.dir === 1 ? 'sort-asc' : 'sort-desc');
+    render();
+  });
+});
+
 document.getElementById('btnResetFilters').addEventListener('click', () => {
   fSearch.value = ''; fStatut.value = ''; fType.value = '';
   fPriorite.value = ''; fZone.value = ''; fDate.value = '';

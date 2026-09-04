@@ -801,6 +801,7 @@ tbody tr:hover { background: #fff5ec; }
             <select id="pfStatut">
               <option value="">Tous</option>
               <option>À faire</option>
+              <option>Réalisé</option>
               <option>En retard</option>
             </select>
           </div>
@@ -1107,9 +1108,10 @@ tbody tr:hover { background: #fff5ec; }
         <label for="pStatut">Statut</label>
         <select id="pStatut">
           <option>À faire</option>
+          <option>Réalisé</option>
           <option>En retard</option>
         </select>
-        <p class="hint">Le statut est recalculé automatiquement selon la prochaine échéance — ce choix ne sert que si tu veux forcer une valeur initiale.</p>
+        <p class="hint">Le statut est recalculé automatiquement selon la prochaine échéance et la fréquence (Réalisé → À faire dans le dernier tiers → En retard) — ce choix ne sert que de valeur initiale.</p>
       </div>
 
       <div class="field">
@@ -1516,13 +1518,30 @@ function nextEcheance(baseDateStr, frequence) {
   return d.toISOString().split('T')[0];
 }
 
-// Statut calculé automatiquement à partir de la date d'échéance (remplace la valeur en base
-// si elle est obsolète — une tâche redevient "En retard" toute seule, sans action manuelle).
+// Durée nominale de chaque fréquence, en jours — sert à situer où on en est dans le cycle
+const FREQUENCE_JOURS = {
+  'Quotidien':    1,
+  'Hebdomadaire': 7,
+  'Mensuel':      30,
+  'Trimestriel':  91,
+  'Semestriel':   182,
+  'Annuel':       365,
+};
+
+// Statut calculé automatiquement à partir de la date d'échéance et de la fréquence :
+//  - au-delà de l'échéance                         → "En retard"
+//  - dans le dernier tiers de la période restante   → "À faire"
+//  - sinon (les deux premiers tiers de la période)  → "Réalisé"
+// Exemple Semestriel (6 mois) : "Réalisé" pendant 4 mois, puis "À faire" les 2 derniers mois.
 function computeAutoStatut(x) {
-  if (!x.prochaineEcheance) return x.statut || 'À faire';
+  if (!x.prochaineEcheance) return x.statut || 'Réalisé';
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const echeance = new Date(x.prochaineEcheance + 'T00:00:00');
-  return echeance < today ? 'En retard' : 'À faire';
+  const diffJours = Math.round((echeance - today) / (1000 * 60 * 60 * 24));
+  if (diffJours < 0) return 'En retard';
+  const periode = FREQUENCE_JOURS[x.frequence] || 30;
+  const seuilDernierTiers = periode / 3;
+  return diffJours <= seuilDernierTiers ? 'À faire' : 'Réalisé';
 }
 
 let toastTimer;
@@ -1711,16 +1730,10 @@ function renderPrev() {
   all.forEach(x => { x.statut = computeAutoStatut(x); });
 
   const countP = s => all.filter(x => x.statut === s).length;
-  const now = new Date();
-  const countRealisesCeMois = all.filter(x => {
-    if (!x.derniereRealisation) return false;
-    const d = new Date(x.derniereRealisation + 'T00:00:00');
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-  }).length;
 
   document.getElementById('prevStats').innerHTML = `
     <div class="stat-card s-prev-afaire"><div class="num mono">${countP('À faire')}</div><div class="lbl">À faire</div></div>
-    <div class="stat-card s-prev-fait"><div class="num mono">${countRealisesCeMois}</div><div class="lbl">Réalisés ce mois-ci</div></div>
+    <div class="stat-card s-prev-fait"><div class="num mono">${countP('Réalisé')}</div><div class="lbl">Réalisés</div></div>
     <div class="stat-card s-prev-retard"><div class="num mono">${countP('En retard')}</div><div class="lbl">En retard</div></div>
   `;
   document.getElementById('tabCountPrev').textContent = all.length;
@@ -2212,7 +2225,7 @@ async function markPrevDone(id) {
   const today = new Date().toISOString().split('T')[0];
   const nouvelleEcheance = nextEcheance(today, x.frequence);
   const updated = await PrevStore.update(id, {
-    statut: 'À faire',              // renouvelée pour le cycle suivant
+    statut: 'Réalisé',              // renouvelée pour le cycle suivant, échéance repoussée
     derniereRealisation: today,
     prochaineEcheance: nouvelleEcheance,
   });

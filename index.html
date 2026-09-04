@@ -801,7 +801,6 @@ tbody tr:hover { background: #fff5ec; }
             <select id="pfStatut">
               <option value="">Tous</option>
               <option>À faire</option>
-              <option>Réalisé</option>
               <option>En retard</option>
             </select>
           </div>
@@ -1108,9 +1107,9 @@ tbody tr:hover { background: #fff5ec; }
         <label for="pStatut">Statut</label>
         <select id="pStatut">
           <option>À faire</option>
-          <option>Réalisé</option>
           <option>En retard</option>
         </select>
+        <p class="hint">Le statut est recalculé automatiquement selon la prochaine échéance — ce choix ne sert que si tu veux forcer une valeur initiale.</p>
       </div>
 
       <div class="field">
@@ -1498,6 +1497,34 @@ function echeanceLabel(dateStr) {
   return `<span class="echeance-ok">✓ ${label}</span>`;
 }
 
+/* ============================================================
+   8bis. RENOUVELLEMENT AUTOMATIQUE + STATUT AUTO — PRÉVENTIF
+   ============================================================ */
+// Calcule la prochaine échéance à partir d'une date de base et d'une fréquence
+function nextEcheance(baseDateStr, frequence) {
+  const base = baseDateStr ? new Date(baseDateStr + 'T00:00:00') : new Date();
+  const d = new Date(base);
+  switch (frequence) {
+    case 'Quotidien':     d.setDate(d.getDate() + 1); break;
+    case 'Hebdomadaire':  d.setDate(d.getDate() + 7); break;
+    case 'Mensuel':       d.setMonth(d.getMonth() + 1); break;
+    case 'Trimestriel':   d.setMonth(d.getMonth() + 3); break;
+    case 'Semestriel':    d.setMonth(d.getMonth() + 6); break;
+    case 'Annuel':        d.setFullYear(d.getFullYear() + 1); break;
+    default:              d.setMonth(d.getMonth() + 1);
+  }
+  return d.toISOString().split('T')[0];
+}
+
+// Statut calculé automatiquement à partir de la date d'échéance (remplace la valeur en base
+// si elle est obsolète — une tâche redevient "En retard" toute seule, sans action manuelle).
+function computeAutoStatut(x) {
+  if (!x.prochaineEcheance) return x.statut || 'À faire';
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const echeance = new Date(x.prochaineEcheance + 'T00:00:00');
+  return echeance < today ? 'En retard' : 'À faire';
+}
+
 let toastTimer;
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -1680,10 +1707,20 @@ function getPrevFiltered() {
 
 function renderPrev() {
   const all = _prevCache;
+  // Statut auto : recalculé à chaque affichage à partir de la prochaine échéance
+  all.forEach(x => { x.statut = computeAutoStatut(x); });
+
   const countP = s => all.filter(x => x.statut === s).length;
+  const now = new Date();
+  const countRealisesCeMois = all.filter(x => {
+    if (!x.derniereRealisation) return false;
+    const d = new Date(x.derniereRealisation + 'T00:00:00');
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  }).length;
+
   document.getElementById('prevStats').innerHTML = `
     <div class="stat-card s-prev-afaire"><div class="num mono">${countP('À faire')}</div><div class="lbl">À faire</div></div>
-    <div class="stat-card s-prev-fait"><div class="num mono">${countP('Réalisé')}</div><div class="lbl">Réalisés</div></div>
+    <div class="stat-card s-prev-fait"><div class="num mono">${countRealisesCeMois}</div><div class="lbl">Réalisés ce mois-ci</div></div>
     <div class="stat-card s-prev-retard"><div class="num mono">${countP('En retard')}</div><div class="lbl">En retard</div></div>
   `;
   document.getElementById('tabCountPrev').textContent = all.length;
@@ -2173,14 +2210,16 @@ async function markPrevDone(id) {
   const x = _prevCache.find(i => i.id === id);
   if (!x) return;
   const today = new Date().toISOString().split('T')[0];
+  const nouvelleEcheance = nextEcheance(today, x.frequence);
   const updated = await PrevStore.update(id, {
-    statut: 'Réalisé',
+    statut: 'À faire',              // renouvelée pour le cycle suivant
     derniereRealisation: today,
+    prochaineEcheance: nouvelleEcheance,
   });
   if (updated) {
     const idx = _prevCache.findIndex(i => i.id === id);
     if (idx >= 0) _prevCache[idx] = updated;
-    toast('Tâche marquée comme réalisée ✓');
+    toast(`Tâche réalisée ✓ — prochaine échéance le ${fmtDateShort(nouvelleEcheance)}`);
     renderPrev();
   } else { toast('Erreur lors de la mise à jour'); }
 }

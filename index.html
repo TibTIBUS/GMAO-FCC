@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="favicon-fc.svg">
-<title>GMAO Maintenance V1.4 — Suivi des interventions</title>
+<title>GMAO Maintenance V1.5 — Suivi et conseils machines</title>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
@@ -411,6 +411,42 @@ tbody tr:hover { background: #fff5ec; }
 .echeance-retard { color: var(--st-open); font-weight: 600; font-size: .82rem; }
 
 /* ============================================================
+   9bis. ONGLET CONSEILS MACHINES
+   ============================================================ */
+.advice-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px;
+}
+.stat-card.s-advice-total    { border-left-color: var(--accent); }
+.stat-card.s-advice-machines { border-left-color: #2563eb; }
+.stat-card.s-advice-zones    { border-left-color: #7c3aed; }
+#adviceTable { min-width: 900px; table-layout: fixed; }
+.advice-title { font-weight: 700; margin-bottom: 3px; }
+.advice-summary {
+  color: var(--ink-soft); font-size: .86rem; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.advice-category {
+  display: inline-flex; align-items: center; padding: 4px 9px;
+  border-radius: 20px; font-size: .76rem; font-weight: 600;
+  color: #7c3aed; background: #ede9fe; white-space: nowrap;
+}
+.advice-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.advice-tag {
+  background: #eef0f2; color: #4b5563; border-radius: 4px;
+  padding: 2px 6px; font-size: .7rem;
+}
+.advice-warning {
+  padding: 12px 14px; border-radius: 8px; background: #fff7ed;
+  border-left: 4px solid #ea580c; color: #9a3412;
+}
+.advice-procedure {
+  white-space: pre-wrap; line-height: 1.65; background: var(--surface-alt);
+  border: 1px solid var(--line); border-radius: 8px; padding: 14px;
+}
+.advice-toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+.advice-photo-note { font-size: .76rem; color: var(--ink-soft); margin-top: 4px; }
+
+/* ============================================================
    10. MODALES
    ============================================================ */
 .modal-overlay {
@@ -545,7 +581,10 @@ tbody tr:hover { background: #fff5ec; }
 
   .confirm-box { border-radius: 14px; }
   .prev-stats { grid-template-columns: repeat(3, 1fr); }
-  .tabs-nav { top: 58px; padding: 0 12px; }
+  .advice-stats { grid-template-columns: repeat(3, 1fr); }
+  .advice-toolbar-actions { width: 100%; }
+  .advice-toolbar-actions .btn { flex: 1; justify-content: center; }
+  .tabs-nav { top: 58px; padding: 0 12px; overflow-x: auto; }
   .tab-btn { padding: 10px 12px; font-size: .82rem; }
 }
 
@@ -553,6 +592,7 @@ tbody tr:hover { background: #fff5ec; }
   .stats { grid-template-columns: 1fr 1fr; }
   .btn-sm { font-size: .78rem; padding: 6px 9px; }
   .prev-stats { grid-template-columns: 1fr; }
+  .advice-stats { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -617,7 +657,7 @@ tbody tr:hover { background: #fff5ec; }
     <div class="logo">FC</div>
     <div>
       <h1>GMAO Maintenance</h1>
-      <small class="mono">SUIVI DES INTERVENTIONS · V1.4</small>
+      <small class="mono">SUIVI DES INTERVENTIONS · V1.5</small>
     </div>
   </div>
   <div class="header-actions">
@@ -645,6 +685,10 @@ tbody tr:hover { background: #fff5ec; }
   <button class="tab-btn" data-tab="preventif">
     📋 Préventif
     <span class="tab-count" id="tabCountPrev">—</span>
+  </button>
+  <button class="tab-btn" data-tab="conseils">
+    💡 Conseils machines
+    <span class="tab-count" id="tabCountAdvice">—</span>
   </button>
 </nav>
 
@@ -872,6 +916,79 @@ tbody tr:hover { background: #fff5ec; }
       </div>
     </section>
   </div><!-- /panel-preventif -->
+
+  <!-- ========================================================
+       PANNEAU CONSEILS MACHINES
+       ======================================================== -->
+  <div class="tab-panel" id="panel-conseils">
+
+    <section class="advice-stats" id="adviceStats">
+      <div class="stat-card s-advice-total"><div class="num mono">—</div><div class="lbl">Conseils</div></div>
+      <div class="stat-card s-advice-machines"><div class="num mono">—</div><div class="lbl">Machines</div></div>
+      <div class="stat-card s-advice-zones"><div class="num mono">—</div><div class="lbl">Zones</div></div>
+    </section>
+
+    <section class="toolbar">
+      <div class="toolbar-row">
+        <div class="prev-toolbar-left">
+          <div class="field field-search">
+            <label for="afSearch">Recherche</label>
+            <input type="text" id="afSearch" placeholder="Machine, conseil, procédure, mot-clé…">
+          </div>
+          <div class="field">
+            <label for="afMachine">Machine</label>
+            <select id="afMachine"><option value="">Toutes</option></select>
+          </div>
+          <div class="field">
+            <label for="afZone">Zone</label>
+            <select id="afZone">
+              <option value="">Toutes</option>
+              <option>Administratif</option><option>Brut</option><option>Extérieur</option>
+              <option>Finition</option><option>KTRC</option><option>Maintenance</option>
+              <option>Rivière</option><option>STEP</option><option>Teinture</option>
+              <option>Tri</option><option>Usine</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="afCategorie">Catégorie</label>
+            <select id="afCategorie">
+              <option value="">Toutes</option>
+              <option>Démarrage</option><option>Réinitialisation</option><option>Réglage</option>
+              <option>Nettoyage</option><option>Dépannage</option><option>Sécurité</option>
+              <option>Fonctionnement</option><option>Autre</option>
+            </select>
+          </div>
+          <div class="filter-reset">
+            <button class="btn btn-light" id="btnResetAdviceFilters">Réinitialiser</button>
+          </div>
+        </div>
+        <div class="advice-toolbar-actions">
+          <button class="btn btn-light" id="btnExportAdviceCsv">↓ Exporter CSV</button>
+          <button class="btn btn-primary" id="btnNewAdvice">＋ Nouveau conseil</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="list-wrap">
+      <div class="list-loading show" id="adviceLoading">
+        <span class="spinner"></span> Chargement des conseils machines…
+      </div>
+      <div class="table-scroll">
+        <table id="adviceTable" style="display:none">
+          <thead><tr>
+            <th>Machine</th><th>Zone</th><th>Catégorie</th>
+            <th>Conseil / procédure</th><th>Mis à jour</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="adviceTbody"></tbody>
+        </table>
+      </div>
+      <div class="int-cards" id="adviceCards"></div>
+      <div class="empty" id="adviceEmptyState" style="display:none;">
+        <div class="big">Aucun conseil machine</div>
+        <div>Créez la première fiche ou modifiez les filtres de recherche.</div>
+      </div>
+    </section>
+  </div><!-- /panel-conseils -->
 
 </main>
 
@@ -1140,6 +1257,109 @@ tbody tr:hover { background: #fff5ec; }
   </div>
 </div>
 
+<!-- MODALE 6 — Créer / Modifier conseil machine -->
+<div class="modal-overlay" id="modalAdvice">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="adviceEditTitle">Nouveau conseil machine</h2>
+      <button class="close-x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="aId">
+
+      <div class="field">
+        <label for="aTitre">Titre du conseil <span class="req">*</span></label>
+        <input type="text" id="aTitre" placeholder="Ex. Réinitialiser l'écran après un défaut">
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="aMachine">Machine / équipement <span class="req">*</span></label>
+          <input type="text" id="aMachine" list="adviceMachinesList" placeholder="Ex. Presse n°2">
+          <datalist id="adviceMachinesList"></datalist>
+        </div>
+        <div class="field">
+          <label for="aZone">Zone <span class="req">*</span></label>
+          <select id="aZone">
+            <option value="">— Sélectionner —</option>
+            <option>Administratif</option><option>Brut</option><option>Extérieur</option>
+            <option>Finition</option><option>KTRC</option><option>Maintenance</option>
+            <option>Rivière</option><option>STEP</option><option>Teinture</option>
+            <option>Tri</option><option>Usine</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="aCategorie">Catégorie <span class="req">*</span></label>
+          <select id="aCategorie">
+            <option>Démarrage</option><option>Réinitialisation</option><option>Réglage</option>
+            <option>Nettoyage</option><option>Dépannage</option><option>Sécurité</option>
+            <option selected>Fonctionnement</option><option>Autre</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="aAuteur">Auteur</label>
+          <input type="text" id="aAuteur" placeholder="Nom du rédacteur">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="aSituation">Problème ou situation</label>
+        <textarea id="aSituation" rows="3" placeholder="Quand faut-il utiliser ce conseil ? Quels symptômes sont observés ?"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="aProcedure">Procédure à suivre <span class="req">*</span></label>
+        <textarea id="aProcedure" rows="8" placeholder="1. Arrêter la machine…&#10;2. Maintenir les boutons A et B…&#10;3. Attendre le redémarrage…"></textarea>
+        <p class="hint">Une étape par ligne pour obtenir une fiche claire et facile à imprimer.</p>
+      </div>
+
+      <div class="field">
+        <label for="aSecurite">Avertissement sécurité</label>
+        <textarea id="aSecurite" rows="3" placeholder="Consignation, arrêt obligatoire, EPI ou autre précaution…"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="aMotsCles">Mots-clés</label>
+        <input type="text" id="aMotsCles" placeholder="écran, défaut, reset, automate">
+        <p class="hint">Séparez les mots-clés par des virgules.</p>
+      </div>
+
+      <div class="section-sep">Photos</div>
+      <div class="field">
+        <label>Écran, boutons ou repères utiles</label>
+        <div class="photo-drop-zone" id="advicePhotoDropZone">
+          <input type="file" id="advicePhotoInput" multiple accept="image/jpeg,image/png,image/webp">
+          <div class="photo-drop-icon">📷</div>
+          <div>Cliquer ou glisser des images ici</div>
+          <div class="advice-photo-note">JPG, PNG ou WEBP · 3 photos maximum · 5 Mo par photo</div>
+        </div>
+        <div class="photo-previews" id="advicePhotoPreviews"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-light" data-close>Annuler</button>
+      <button class="btn btn-primary" id="btnSaveAdvice">Enregistrer le conseil</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE 7 — Détail conseil machine -->
+<div class="modal-overlay" id="modalAdviceView">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Détail du conseil machine</h2>
+      <button class="close-x" data-close>&times;</button>
+    </div>
+    <div class="modal-body" id="adviceViewBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-light" data-close>Fermer</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODALE CONFIRMATION SUPPRESSION -->
 <div class="modal-overlay confirm-overlay" id="confirmOverlay">
   <div class="confirm-box">
@@ -1262,6 +1482,42 @@ const PrevStore = {
 };
 
 /* ============================================================
+   2bis. COUCHE STOCKAGE — CONSEILS MACHINES
+   ============================================================ */
+const AdviceStore = {
+  TABLE: 'conseils_machine',
+
+  async getAll() {
+    if (!sb) return [];
+    const { data, error } = await sb.from(this.TABLE).select('*').order('date_modification', { ascending: false });
+    if (error) { console.error(error); throw error; }
+    return (data || []).map(adviceDbToApp);
+  },
+
+  async add(item) {
+    if (!sb) return null;
+    const { data, error } = await sb.from(this.TABLE).insert([adviceAppToDB(item)]).select().single();
+    if (error) { console.error(error); return null; }
+    return adviceDbToApp(data);
+  },
+
+  async update(id, changes) {
+    if (!sb) return null;
+    const payload = adviceAppToDB({ ...changes, dateModification: new Date().toISOString() });
+    const { data, error } = await sb.from(this.TABLE).update(payload).eq('id', id).select().single();
+    if (error) { console.error(error); return null; }
+    return adviceDbToApp(data);
+  },
+
+  async remove(id) {
+    if (!sb) return false;
+    const { error } = await sb.from(this.TABLE).delete().eq('id', id);
+    if (error) { console.error(error); return false; }
+    return true;
+  }
+};
+
+/* ============================================================
    3. CONVERSION camelCase ↔ snake_case — INTERVENTIONS
    ============================================================ */
 const SEP = '||';
@@ -1358,10 +1614,50 @@ function prevDbToApp(r) {
 }
 
 /* ============================================================
+   4bis. CONVERSION — CONSEILS MACHINES
+   ============================================================ */
+function adviceAppToDB(x) {
+  const r = {};
+  if (x.id               !== undefined) r.id                = x.id;
+  if (x.titre            !== undefined) r.titre             = x.titre;
+  if (x.machine          !== undefined) r.machine           = x.machine;
+  if (x.zone             !== undefined) r.zone              = x.zone;
+  if (x.categorie        !== undefined) r.categorie         = x.categorie;
+  if (x.situation        !== undefined) r.situation         = x.situation;
+  if (x.procedure        !== undefined) r.procedure         = x.procedure;
+  if (x.securite         !== undefined) r.securite          = x.securite;
+  if (x.motsCles         !== undefined) r.mots_cles         = x.motsCles;
+  if (x.photos           !== undefined) r.photos            = x.photos;
+  if (x.auteur           !== undefined) r.auteur            = x.auteur;
+  if (x.dateCreation     !== undefined) r.date_creation     = x.dateCreation;
+  if (x.dateModification !== undefined) r.date_modification = x.dateModification;
+  return r;
+}
+
+function adviceDbToApp(r) {
+  return {
+    id:               r.id,
+    titre:            r.titre || '',
+    machine:          r.machine || '',
+    zone:             r.zone || '',
+    categorie:        r.categorie || 'Fonctionnement',
+    situation:        r.situation || '',
+    procedure:        r.procedure || '',
+    securite:         r.securite || '',
+    motsCles:         Array.isArray(r.mots_cles) ? r.mots_cles : [],
+    photos:           Array.isArray(r.photos) ? r.photos : [],
+    auteur:           r.auteur || '',
+    dateCreation:     r.date_creation,
+    dateModification: r.date_modification,
+  };
+}
+
+/* ============================================================
    5. CACHES
    ============================================================ */
 let _cache = [];
 let _prevCache = [];
+let _adviceCache = [];
 
 async function refreshCache() {
   setLoading(true);
@@ -1385,6 +1681,19 @@ async function refreshPrevCache() {
   finally { setPrevLoading(false); renderPrev(); }
 }
 
+async function refreshAdviceCache() {
+  setAdviceLoading(true);
+  try {
+    _adviceCache = await AdviceStore.getAll();
+  } catch(e) {
+    console.error('Erreur chargement conseils :', e);
+    toast('Impossible de charger les conseils machines');
+  } finally {
+    setAdviceLoading(false);
+    renderAdvice();
+  }
+}
+
 const isMobile = () => window.innerWidth <= 760;
 
 function setLoading(v) {
@@ -1395,12 +1704,17 @@ function setPrevLoading(v) {
   document.getElementById('prevLoading').classList.toggle('show', v);
   document.getElementById('prevTable').style.display = v || isMobile() ? 'none' : '';
 }
+function setAdviceLoading(v) {
+  document.getElementById('adviceLoading').classList.toggle('show', v);
+  document.getElementById('adviceTable').style.display = v || isMobile() ? 'none' : '';
+}
 
 /* ============================================================
    6. TEMPS RÉEL
    ============================================================ */
 let _mainChannel = null;
 let _prevChannel = null;
+let _adviceChannel = null;
 let _realtimeReconnectTimer = null;
 
 function scheduleRealtimeReconnect() {
@@ -1419,6 +1733,7 @@ function setupRealtime() {
   // d'en recréer pour ne pas dupliquer les abonnements.
   if (_mainChannel) { try { sb.removeChannel(_mainChannel); } catch(e) {} _mainChannel = null; }
   if (_prevChannel) { try { sb.removeChannel(_prevChannel); } catch(e) {} _prevChannel = null; }
+  if (_adviceChannel) { try { sb.removeChannel(_adviceChannel); } catch(e) {} _adviceChannel = null; }
 
   _mainChannel = sb.channel('gmao-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'interventions' }, payload => {
@@ -1466,6 +1781,22 @@ function setupRealtime() {
       renderPrev();
     })
     .subscribe();
+
+  _adviceChannel = sb.channel('gmao-advice-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'conseils_machine' }, payload => {
+      if (payload.eventType === 'INSERT') {
+        const item = adviceDbToApp(payload.new);
+        if (!_adviceCache.find(x => x.id === item.id)) _adviceCache.unshift(item);
+      } else if (payload.eventType === 'UPDATE') {
+        const item = adviceDbToApp(payload.new);
+        const idx = _adviceCache.findIndex(x => x.id === item.id);
+        if (idx >= 0) _adviceCache[idx] = item; else _adviceCache.unshift(item);
+      } else if (payload.eventType === 'DELETE') {
+        _adviceCache = _adviceCache.filter(x => x.id !== payload.old.id);
+      }
+      renderAdvice();
+    })
+    .subscribe();
 }
 
 /* Filets de sécurité complémentaires au temps réel : si un onglet reste
@@ -1477,12 +1808,14 @@ function setupAutoResync() {
     if (document.visibilityState === 'visible') {
       refreshCache();
       if (typeof refreshPrevCache === 'function') refreshPrevCache();
+      if (typeof refreshAdviceCache === 'function') refreshAdviceCache();
     }
   });
 
   window.addEventListener('online', () => {
     refreshCache();
     if (typeof refreshPrevCache === 'function') refreshPrevCache();
+    if (typeof refreshAdviceCache === 'function') refreshAdviceCache();
     setupRealtime(); // le canal temps réel ne survit pas toujours à une coupure réseau
   });
 
@@ -1491,6 +1824,7 @@ function setupAutoResync() {
   setInterval(() => {
     refreshCache();
     if (typeof refreshPrevCache === 'function') refreshPrevCache();
+    if (typeof refreshAdviceCache === 'function') refreshAdviceCache();
   }, 2 * 60 * 1000);
 }
 
@@ -1533,6 +1867,18 @@ function fmtDateShort(iso) {
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g,
     c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function normalizeSearch(value) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function nl2br(value) {
+  return esc(value).replace(/\n/g, '<br>');
+}
+
+function adviceCategoryBadge(value) {
+  return `<span class="advice-category">${esc(value || 'Fonctionnement')}</span>`;
 }
 
 function statutBadge(s) {
@@ -1870,6 +2216,116 @@ function renderPrev() {
 }
 
 /* ============================================================
+   10bis. FILTRAGE + RENDU — CONSEILS MACHINES
+   ============================================================ */
+const afSearch     = document.getElementById('afSearch');
+const afMachine    = document.getElementById('afMachine');
+const afZone       = document.getElementById('afZone');
+const afCategorie  = document.getElementById('afCategorie');
+const adviceTbody  = document.getElementById('adviceTbody');
+const adviceCards  = document.getElementById('adviceCards');
+
+function adviceMachines() {
+  return [...new Set(_adviceCache.map(x => x.machine).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true, sensitivity: 'base' }));
+}
+
+function populateAdviceMachines() {
+  const selected = afMachine.value;
+  const machines = adviceMachines();
+  afMachine.innerHTML = '<option value="">Toutes</option>' +
+    machines.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  afMachine.value = machines.includes(selected) ? selected : '';
+  document.getElementById('adviceMachinesList').innerHTML =
+    machines.map(x => `<option value="${esc(x)}"></option>`).join('');
+}
+
+function getAdviceFiltered() {
+  let list = [..._adviceCache];
+  const q = normalizeSearch(afSearch.value.trim());
+  if (q) list = list.filter(x => normalizeSearch([
+    x.titre, x.machine, x.zone, x.categorie, x.situation,
+    x.procedure, x.securite, x.auteur, ...(x.motsCles || [])
+  ].join(' ')).includes(q));
+  if (afMachine.value)   list = list.filter(x => x.machine === afMachine.value);
+  if (afZone.value)      list = list.filter(x => x.zone === afZone.value);
+  if (afCategorie.value) list = list.filter(x => x.categorie === afCategorie.value);
+  return list.sort((a, b) => new Date(b.dateModification || b.dateCreation) - new Date(a.dateModification || a.dateCreation));
+}
+
+function renderAdvice() {
+  populateAdviceMachines();
+  const machines = new Set(_adviceCache.map(x => x.machine).filter(Boolean));
+  const zones = new Set(_adviceCache.map(x => x.zone).filter(Boolean));
+  document.getElementById('adviceStats').innerHTML = `
+    <div class="stat-card s-advice-total"><div class="num mono">${_adviceCache.length}</div><div class="lbl">Conseils</div></div>
+    <div class="stat-card s-advice-machines"><div class="num mono">${machines.size}</div><div class="lbl">Machines</div></div>
+    <div class="stat-card s-advice-zones"><div class="num mono">${zones.size}</div><div class="lbl">Zones</div></div>`;
+  document.getElementById('tabCountAdvice').textContent = _adviceCache.length;
+
+  const list = getAdviceFiltered();
+  adviceTbody.innerHTML = '';
+  adviceCards.innerHTML = '';
+  document.getElementById('adviceEmptyState').style.display = list.length ? 'none' : 'block';
+
+  list.forEach(x => {
+    const tags = (x.motsCles || []).slice(0, 4).map(tag => `<span class="advice-tag">${esc(tag)}</span>`).join('');
+    const photoInfo = x.photos && x.photos.length
+      ? `<span class="photo-badge">📷 ${x.photos.length}</span>` : '';
+    const updated = x.dateModification || x.dateCreation;
+
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-rowid', x.id);
+    tr.innerHTML = `
+      <td><strong>${esc(x.machine)}</strong>${photoInfo ? `<div style="margin-top:5px">${photoInfo}</div>` : ''}</td>
+      <td>${x.zone ? `<span class="zone-badge">${esc(x.zone)}</span>` : '—'}</td>
+      <td>${adviceCategoryBadge(x.categorie)}</td>
+      <td>
+        <div class="advice-title">${esc(x.titre)}</div>
+        <div class="advice-summary">${esc(x.situation || x.procedure)}</div>
+        ${tags ? `<div class="advice-tags">${tags}</div>` : ''}
+      </td>
+      <td><span class="cell-date">${fmtDateStacked(updated)}</span></td>
+      <td><div class="row-actions">
+        <button class="btn btn-light btn-sm" data-advice-view="${x.id}">Voir</button>
+        <button class="btn btn-light btn-sm" data-advice-edit="${x.id}">Modifier</button>
+        <button class="btn btn-light btn-sm" data-advice-export="${x.id}">PDF</button>
+        <button class="btn-trash" data-delete="${x.id}" data-type="advice" title="Supprimer">${TRASH_ICON}</button>
+      </div></td>`;
+    adviceTbody.appendChild(tr);
+
+    const card = document.createElement('div');
+    card.className = 'int-card';
+    card.setAttribute('data-rowid', x.id);
+    card.innerHTML = `
+      <div class="int-card-head">
+        <strong>${esc(x.machine)}</strong>
+        <div class="int-card-badges">
+          ${x.zone ? `<span class="zone-badge">${esc(x.zone)}</span>` : ''}
+          ${adviceCategoryBadge(x.categorie)}
+        </div>
+      </div>
+      <div class="int-card-body">
+        <div class="advice-title">${esc(x.titre)}</div>
+        <div class="int-card-desc">${esc(x.situation || x.procedure)}</div>
+        ${tags ? `<div class="advice-tags">${tags}</div>` : ''}
+        <div class="int-card-meta">
+          <span>🕐 ${fmtDate(updated)}</span>
+          ${x.auteur ? `<span>👤 ${esc(x.auteur)}</span>` : ''}
+          ${photoInfo}
+        </div>
+      </div>
+      <div class="int-card-foot">
+        <button class="btn btn-light btn-sm" data-advice-view="${x.id}">Voir</button>
+        <button class="btn btn-light btn-sm" data-advice-edit="${x.id}">Modifier</button>
+        <button class="btn btn-light btn-sm" data-advice-export="${x.id}">PDF</button>
+        <button class="btn-trash" data-delete="${x.id}" data-type="advice" title="Supprimer">${TRASH_ICON}</button>
+      </div>`;
+    adviceCards.appendChild(card);
+  });
+}
+
+/* ============================================================
    11. GESTION DES PHOTOS — BASE64 LOCAL
    ============================================================ */
 let _pendingPhotos = [];   // { dataUrl, name }[] — photos en attente d'enregistrement
@@ -1959,6 +2415,140 @@ function resetPhotoState() {
 
 function getAllPhotos() {
   return [..._existingPhotos, ..._pendingPhotos.map(p => p.dataUrl)];
+}
+
+/* ============================================================
+   11bis. PHOTOS DES CONSEILS — SUPABASE STORAGE PRIVÉ
+   ============================================================ */
+const ADVICE_BUCKET = 'conseils-machines';
+let _advicePendingPhotos = [];  // { file, previewUrl }[]
+let _adviceExistingPhotos = []; // chemins Storage conservés
+let _adviceOriginalPhotos = []; // chemins au moment de l'ouverture
+const _advicePhotoUrlCache = new Map();
+
+function initAdvicePhotoUpload() {
+  const dropZone = document.getElementById('advicePhotoDropZone');
+  const input = document.getElementById('advicePhotoInput');
+  dropZone.addEventListener('click', () => input.click());
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    handleAdviceFiles(e.dataTransfer.files);
+  });
+  input.addEventListener('change', () => {
+    handleAdviceFiles(input.files);
+    input.value = '';
+  });
+}
+
+function handleAdviceFiles(files) {
+  const accepted = ['image/jpeg', 'image/png', 'image/webp'];
+  Array.from(files).forEach(file => {
+    if (_adviceExistingPhotos.length + _advicePendingPhotos.length >= 3) {
+      toast('3 photos maximum par conseil');
+      return;
+    }
+    if (!accepted.includes(file.type)) { toast('Format accepté : JPG, PNG ou WEBP'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast('Image trop lourde (5 Mo maximum)'); return; }
+    _advicePendingPhotos.push({ file, previewUrl: URL.createObjectURL(file) });
+  });
+  renderAdvicePhotoPreviews();
+}
+
+async function getAdvicePhotoUrls(paths) {
+  const missing = (paths || []).filter(path => !_advicePhotoUrlCache.has(path));
+  if (missing.length && sb) {
+    const { data, error } = await sb.storage.from(ADVICE_BUCKET).createSignedUrls(missing, 3600);
+    if (error) console.error('Erreur URLs photos conseils :', error);
+    (data || []).forEach((item, index) => {
+      if (item && item.signedUrl) _advicePhotoUrlCache.set(item.path || missing[index], item.signedUrl);
+    });
+  }
+  return (paths || []).map(path => ({ path, url: _advicePhotoUrlCache.get(path) || '' }));
+}
+
+async function renderAdvicePhotoPreviews() {
+  const container = document.getElementById('advicePhotoPreviews');
+  container.innerHTML = '';
+  const existing = await getAdvicePhotoUrls(_adviceExistingPhotos);
+  existing.forEach((photo, i) => {
+    const div = document.createElement('div');
+    div.className = 'photo-thumb';
+    div.innerHTML = `<img src="${esc(photo.url)}" alt="Photo ${i + 1}">
+      <button class="photo-thumb-remove" data-advice-existing="${i}" title="Retirer">×</button>`;
+    container.appendChild(div);
+  });
+  _advicePendingPhotos.forEach((photo, i) => {
+    const div = document.createElement('div');
+    div.className = 'photo-thumb';
+    div.innerHTML = `<img src="${esc(photo.previewUrl)}" alt="${esc(photo.file.name)}">
+      <button class="photo-thumb-remove" data-advice-pending="${i}" title="Retirer">×</button>`;
+    container.appendChild(div);
+  });
+  container.querySelectorAll('.photo-thumb-remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (btn.dataset.adviceExisting !== undefined) {
+        _adviceExistingPhotos.splice(Number(btn.dataset.adviceExisting), 1);
+      } else {
+        const [removed] = _advicePendingPhotos.splice(Number(btn.dataset.advicePending), 1);
+        if (removed) URL.revokeObjectURL(removed.previewUrl);
+      }
+      renderAdvicePhotoPreviews();
+    });
+  });
+}
+
+function resetAdvicePhotoState(paths = []) {
+  _advicePendingPhotos.forEach(x => URL.revokeObjectURL(x.previewUrl));
+  _advicePendingPhotos = [];
+  _adviceExistingPhotos = [...paths];
+  _adviceOriginalPhotos = [...paths];
+  renderAdvicePhotoPreviews();
+}
+
+function safeStorageName(name) {
+  const dot = name.lastIndexOf('.');
+  const ext = dot >= 0 ? name.slice(dot).toLowerCase() : '';
+  const stem = (dot >= 0 ? name.slice(0, dot) : name)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'photo';
+  return `${stem}${ext}`;
+}
+
+async function uploadAdvicePhotos(adviceId) {
+  const uploaded = [];
+  try {
+    for (const item of _advicePendingPhotos) {
+      const unique = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      const path = `${adviceId}/${unique}-${safeStorageName(item.file.name)}`;
+      const { error } = await sb.storage.from(ADVICE_BUCKET).upload(path, item.file, {
+        contentType: item.file.type,
+        cacheControl: '3600',
+        upsert: false,
+      });
+      if (error) throw error;
+      uploaded.push(path);
+    }
+    return uploaded;
+  } catch (error) {
+    // Si une photo d'un lot échoue, supprimer celles déjà envoyées afin
+    // de ne pas laisser de fichiers orphelins dans le stockage privé.
+    if (uploaded.length) await removeAdvicePhotos(uploaded);
+    throw error;
+  }
+}
+
+async function removeAdvicePhotos(paths) {
+  if (!paths || !paths.length || !sb) return;
+  const { error } = await sb.storage.from(ADVICE_BUCKET).remove(paths);
+  if (error) console.error('Erreur suppression photos conseils :', error);
+  paths.forEach(path => _advicePhotoUrlCache.delete(path));
 }
 
 /* ============================================================
@@ -2323,6 +2913,205 @@ async function markPrevDone(id) {
 }
 
 /* ============================================================
+   16bis. CRÉER / MODIFIER / VOIR UN CONSEIL MACHINE
+   ============================================================ */
+const modalAdvice = document.getElementById('modalAdvice');
+
+async function openNewAdvice() {
+  document.getElementById('adviceEditTitle').textContent = 'Nouveau conseil machine';
+  document.getElementById('aId').value = '';
+  document.getElementById('aTitre').value = '';
+  document.getElementById('aMachine').value = '';
+  document.getElementById('aZone').value = '';
+  document.getElementById('aCategorie').value = 'Fonctionnement';
+  document.getElementById('aSituation').value = '';
+  document.getElementById('aProcedure').value = '';
+  document.getElementById('aSecurite').value = '';
+  document.getElementById('aMotsCles').value = '';
+  let author = '';
+  if (sb) {
+    const { data } = await sb.auth.getSession();
+    author = data.session?.user?.email || '';
+  }
+  document.getElementById('aAuteur').value = author;
+  resetAdvicePhotoState();
+  showModal(modalAdvice);
+  setTimeout(() => document.getElementById('aTitre').focus(), 50);
+}
+
+async function openEditAdvice(id) {
+  const x = _adviceCache.find(item => item.id === id);
+  if (!x) return;
+  document.getElementById('adviceEditTitle').textContent = 'Modifier — ' + x.titre;
+  document.getElementById('aId').value = x.id;
+  document.getElementById('aTitre').value = x.titre;
+  document.getElementById('aMachine').value = x.machine;
+  document.getElementById('aZone').value = x.zone;
+  document.getElementById('aCategorie').value = x.categorie;
+  document.getElementById('aSituation').value = x.situation;
+  document.getElementById('aProcedure').value = x.procedure;
+  document.getElementById('aSecurite').value = x.securite;
+  document.getElementById('aMotsCles').value = (x.motsCles || []).join(', ');
+  document.getElementById('aAuteur').value = x.auteur;
+  resetAdvicePhotoState(x.photos || []);
+  showModal(modalAdvice);
+}
+
+function adviceFormData() {
+  const motsCles = document.getElementById('aMotsCles').value
+    .split(',').map(x => x.trim()).filter(Boolean)
+    .filter((value, index, array) => array.findIndex(x => normalizeSearch(x) === normalizeSearch(value)) === index);
+  return {
+    titre:     document.getElementById('aTitre').value.trim(),
+    machine:   document.getElementById('aMachine').value.trim(),
+    zone:      document.getElementById('aZone').value,
+    categorie: document.getElementById('aCategorie').value,
+    situation: document.getElementById('aSituation').value.trim(),
+    procedure: document.getElementById('aProcedure').value.trim(),
+    securite:  document.getElementById('aSecurite').value.trim(),
+    motsCles,
+    auteur:    document.getElementById('aAuteur').value.trim(),
+  };
+}
+
+document.getElementById('btnSaveAdvice').addEventListener('click', async () => {
+  const id = document.getElementById('aId').value;
+  const data = adviceFormData();
+  if (!data.titre || !data.machine || !data.zone || !data.procedure) {
+    toast('Renseignez le titre, la machine, la zone et la procédure (*)');
+    return;
+  }
+  const btn = document.getElementById('btnSaveAdvice');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement…';
+
+  let saved = null;
+  let created = false;
+  let createdId = '';
+  let uploadedPaths = [];
+  try {
+    if (id) {
+      if (_advicePendingPhotos.length) uploadedPaths = await uploadAdvicePhotos(id);
+      saved = await AdviceStore.update(id, {
+        ...data,
+        photos: [..._adviceExistingPhotos, ...uploadedPaths],
+      });
+    } else {
+      const now = new Date().toISOString();
+      saved = await AdviceStore.add({ ...data, photos: [], dateCreation: now, dateModification: now });
+      if (!saved) throw new Error('Création du conseil impossible');
+      created = true;
+      createdId = saved.id;
+      if (_advicePendingPhotos.length) uploadedPaths = await uploadAdvicePhotos(saved.id);
+      if (uploadedPaths.length) {
+        saved = await AdviceStore.update(saved.id, { photos: uploadedPaths });
+      }
+    }
+    if (!saved) throw new Error('Enregistrement du conseil impossible');
+
+    const removedPaths = _adviceOriginalPhotos.filter(path => !_adviceExistingPhotos.includes(path));
+    await removeAdvicePhotos(removedPaths);
+
+    const idx = _adviceCache.findIndex(x => x.id === saved.id);
+    if (idx >= 0) _adviceCache[idx] = saved; else _adviceCache.unshift(saved);
+    resetAdvicePhotoState();
+    hideModal(modalAdvice);
+    renderAdvice();
+    toast(id ? 'Conseil mis à jour ✓' : 'Conseil enregistré ✓');
+  } catch(error) {
+    console.error(error);
+    // Une mise à jour de fiche n'est validée qu'après l'enregistrement de
+    // ses nouveaux chemins. En cas d'échec, nettoyer les nouveaux fichiers.
+    if (uploadedPaths.length) await removeAdvicePhotos(uploadedPaths);
+    // Pour une création incomplète, retirer également la ligne vide de photos.
+    if (created && createdId) await AdviceStore.remove(createdId);
+    toast('Erreur lors de l’enregistrement du conseil');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Enregistrer le conseil';
+  }
+});
+
+async function advicePhotosHtml(paths, linkToFull = true) {
+  const photos = await getAdvicePhotoUrls(paths || []);
+  if (!photos.length) return '';
+  return `<div class="field"><label>Photos (${photos.length})</label><div class="photo-gallery">
+    ${photos.map((photo, i) => photo.url
+      ? `${linkToFull ? `<a href="${esc(photo.url)}" target="_blank" rel="noopener">` : '<span>'}<img src="${esc(photo.url)}" alt="Photo ${i + 1}">${linkToFull ? '</a>' : '</span>'}`
+      : '').join('')}
+  </div></div>`;
+}
+
+async function openAdviceView(id) {
+  const x = _adviceCache.find(item => item.id === id);
+  if (!x) return;
+  const row = (label, value) => `<div class="field"><label>${label}</label><div>${value || '—'}</div></div>`;
+  const photos = await advicePhotosHtml(x.photos);
+  document.getElementById('adviceViewBody').innerHTML = `
+    ${row('Titre', `<strong>${esc(x.titre)}</strong>`)}
+    <div class="form-grid">
+      ${row('Machine / équipement', esc(x.machine))}
+      ${row('Zone', `<span class="zone-badge">${esc(x.zone)}</span>`)}
+    </div>
+    <div class="form-grid">
+      ${row('Catégorie', adviceCategoryBadge(x.categorie))}
+      ${row('Auteur', esc(x.auteur) || '—')}
+    </div>
+    ${x.situation ? row('Problème ou situation', nl2br(x.situation)) : ''}
+    <div class="field"><label>Procédure à suivre</label><div class="advice-procedure">${nl2br(x.procedure)}</div></div>
+    ${x.securite ? `<div class="field"><label>Sécurité</label><div class="advice-warning">⚠ ${nl2br(x.securite)}</div></div>` : ''}
+    ${(x.motsCles || []).length ? row('Mots-clés', `<div class="advice-tags">${x.motsCles.map(tag => `<span class="advice-tag">${esc(tag)}</span>`).join('')}</div>`) : ''}
+    ${photos}
+    <div class="form-grid">
+      ${row('Créé le', `<span class="mono">${fmtDate(x.dateCreation)}</span>`)}
+      ${row('Mis à jour le', `<span class="mono">${fmtDate(x.dateModification)}</span>`)}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+      <button class="btn btn-light btn-sm" data-advice-edit="${x.id}" data-close>Modifier</button>
+      <button class="btn btn-light btn-sm" data-advice-export="${x.id}">Exporter en PDF</button>
+      <button class="btn btn-danger btn-sm" data-delete="${x.id}" data-type="advice">Supprimer</button>
+    </div>`;
+  showModal(document.getElementById('modalAdviceView'));
+}
+
+async function exportAdvicePdf(id) {
+  const x = _adviceCache.find(item => item.id === id);
+  if (!x) return;
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) { toast('Autorisez les fenêtres contextuelles pour exporter le PDF'); return; }
+  printWindow.document.write('<p style="font-family:sans-serif;padding:24px">Préparation de la fiche…</p>');
+  const photos = await getAdvicePhotoUrls(x.photos || []);
+  const photoHtml = photos.filter(p => p.url).map((p, i) => `<img src="${esc(p.url)}" alt="Photo ${i + 1}">`).join('');
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(x.titre)}</title>
+    <style>
+      @page { size: A4; margin: 16mm; }
+      * { box-sizing: border-box; } body { font-family: Arial, sans-serif; color:#1c1f26; line-height:1.5; margin:0; }
+      header { border-bottom:3px solid #e2620a; padding-bottom:12px; margin-bottom:18px; }
+      .brand { color:#2f4858; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:.8px; }
+      h1 { font-size:24px; margin:6px 0; } h2 { font-size:13px; text-transform:uppercase; color:#5b6270; margin:18px 0 7px; }
+      .meta { display:flex; gap:10px; flex-wrap:wrap; font-size:13px; } .pill { background:#eef0f2; border-radius:12px; padding:4px 10px; }
+      .procedure { white-space:pre-wrap; background:#f6f5f1; border:1px solid #d9d7cf; border-radius:8px; padding:14px; }
+      .warning { white-space:pre-wrap; background:#fff7ed; border-left:4px solid #ea580c; padding:12px; color:#9a3412; }
+      .photos { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:10px; }
+      .photos img { width:100%; max-height:240px; object-fit:contain; border:1px solid #d9d7cf; border-radius:6px; }
+      footer { margin-top:22px; padding-top:10px; border-top:1px solid #d9d7cf; font-size:11px; color:#6b7280; }
+      .no-print { margin:12px 0; } @media print { .no-print { display:none; } }
+    </style></head><body>
+    <button class="no-print" onclick="window.print()">Imprimer / Enregistrer en PDF</button>
+    <header><div class="brand">GMAO Maintenance · Conseil machine</div><h1>${esc(x.titre)}</h1>
+      <div class="meta"><span class="pill">Machine : ${esc(x.machine)}</span><span class="pill">Zone : ${esc(x.zone)}</span><span class="pill">${esc(x.categorie)}</span></div></header>
+    ${x.situation ? `<h2>Problème ou situation</h2><div>${nl2br(x.situation)}</div>` : ''}
+    <h2>Procédure à suivre</h2><div class="procedure">${esc(x.procedure)}</div>
+    ${x.securite ? `<h2>Sécurité</h2><div class="warning">⚠ ${esc(x.securite)}</div>` : ''}
+    ${photoHtml ? `<h2>Repères visuels</h2><div class="photos">${photoHtml}</div>` : ''}
+    <footer>Auteur : ${esc(x.auteur || '—')} · Mise à jour : ${esc(fmtDate(x.dateModification || x.dateCreation))}</footer>
+    <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300));<\/script>
+    </body></html>`);
+  printWindow.document.close();
+}
+
+/* ============================================================
    17. EXPORT CSV
    ============================================================ */
 document.getElementById('btnExport').addEventListener('click', () => {
@@ -2351,17 +3140,45 @@ document.getElementById('btnExport').addEventListener('click', () => {
   toast('Export CSV téléchargé ✓');
 });
 
+document.getElementById('btnExportAdviceCsv').addEventListener('click', () => {
+  const list = getAdviceFiltered();
+  const headers = ['Titre','Machine','Zone','Catégorie','Situation','Procédure','Sécurité','Mots-clés','Auteur','Créé le','Mis à jour le'];
+  const rows = list.map(x => [
+    x.titre, x.machine, x.zone, x.categorie, x.situation, x.procedure,
+    x.securite, (x.motsCles || []).join(', '), x.auteur,
+    fmtDate(x.dateCreation), fmtDate(x.dateModification)
+  ]);
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';'))
+    .join('\n');
+  const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `GMAO_conseils_machines_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast(`${list.length} conseil${list.length > 1 ? 's' : ''} exporté${list.length > 1 ? 's' : ''} ✓`);
+});
+
 /* ============================================================
    18. SUPPRESSION
    ============================================================ */
 let _pendingDeleteId   = null;
-let _pendingDeleteType = null; // 'intervention' | 'preventif'
+let _pendingDeleteType = null; // 'intervention' | 'preventif' | 'advice'
 
 function openConfirmDelete(id, type) {
   _pendingDeleteId   = id;
   _pendingDeleteType = type;
 
-  if (type === 'preventif') {
+  if (type === 'advice') {
+    const x = _adviceCache.find(i => i.id === id);
+    document.getElementById('confirmTitle').textContent = 'Supprimer ce conseil ?';
+    document.getElementById('confirmDesc').textContent =
+      x ? `${x.machine} — ${x.titre}` : 'Cette action est irréversible.';
+  } else if (type === 'preventif') {
     const x = _prevCache.find(i => i.id === id);
     document.getElementById('confirmTitle').textContent = 'Supprimer cette tâche ?';
     document.getElementById('confirmDesc').textContent =
@@ -2390,7 +3207,18 @@ document.getElementById('confirmOk').addEventListener('click', async () => {
   document.getElementById('confirmOverlay').classList.remove('show');
   document.querySelectorAll('.modal-overlay.show').forEach(hideModal);
 
-  if (type === 'preventif') {
+  if (type === 'advice') {
+    const item = _adviceCache.find(x => x.id === id);
+    const removed = await AdviceStore.remove(id);
+    if (removed) {
+      _adviceCache = _adviceCache.filter(x => x.id !== id);
+      await removeAdvicePhotos(item?.photos || []);
+      renderAdvice();
+      toast('Conseil supprimé');
+    } else {
+      toast('Erreur lors de la suppression');
+    }
+  } else if (type === 'preventif') {
     await PrevStore.remove(id);
     _prevCache = _prevCache.filter(x => x.id !== id);
     renderPrev();
@@ -2433,9 +3261,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('panel-' + tab).classList.add('active');
 
-    // Charger préventif au premier clic
+    // Charger les modules au premier clic
     if (tab === 'preventif' && _prevCache.length === 0) {
       refreshPrevCache();
+    }
+    if (tab === 'conseils' && _adviceCache.length === 0) {
+      refreshAdviceCache();
     }
   });
 });
@@ -2457,6 +3288,11 @@ document.addEventListener('click', async e => {
   if (btn.dataset.prevEdit) { openEditPrev(btn.dataset.prevEdit); return; }
   if (btn.dataset.prevDone) { await markPrevDone(btn.dataset.prevDone); return; }
 
+  // Conseils machines
+  if (btn.dataset.adviceView)   { await openAdviceView(btn.dataset.adviceView); return; }
+  if (btn.dataset.adviceEdit)   { await openEditAdvice(btn.dataset.adviceEdit); return; }
+  if (btn.dataset.adviceExport) { await exportAdvicePdf(btn.dataset.adviceExport); return; }
+
   // Suppression
   if (btn.dataset.delete) {
     const type = btn.dataset.type || 'intervention';
@@ -2470,6 +3306,7 @@ document.addEventListener('click', async e => {
    ============================================================ */
 document.getElementById('btnNew').addEventListener('click', openNew);
 document.getElementById('btnNewPrev').addEventListener('click', openNewPrev);
+document.getElementById('btnNewAdvice').addEventListener('click', openNewAdvice);
 
 [fSearch].forEach(el => el.addEventListener('input', render));
 [fStatut, fType, fPriorite, fZone, fDate].forEach(el => el.addEventListener('change', render));
@@ -2500,10 +3337,19 @@ document.getElementById('btnResetPrevFilters').addEventListener('click', () => {
   renderPrev();
 });
 
+/* Filtres conseils machines */
+afSearch.addEventListener('input', renderAdvice);
+[afMachine, afZone, afCategorie].forEach(el => el.addEventListener('change', renderAdvice));
+document.getElementById('btnResetAdviceFilters').addEventListener('click', () => {
+  afSearch.value = ''; afMachine.value = ''; afZone.value = ''; afCategorie.value = '';
+  renderAdvice();
+});
+
 /* ============================================================
    23. AUTHENTIFICATION & LANCEMENT
    ============================================================ */
 initPhotoUpload();
+initAdvicePhotoUpload();
 
 const loginOverlay = document.getElementById('loginOverlay');
 const loginForm    = document.getElementById('loginForm');
@@ -2528,6 +3374,7 @@ function startApp() {
   setupAutoResync();
   refreshCache();
   if (typeof refreshPrevCache === 'function') refreshPrevCache();
+  if (typeof refreshAdviceCache === 'function') refreshAdviceCache();
 }
 
 /* Vérifie la session au chargement et écoute les changements d'état */
@@ -2535,7 +3382,11 @@ async function initAuth() {
   if (!configured || !sb) {        // App non configurée → ancien comportement
     showLogin(false);
     setLoading(false);
+    setPrevLoading(false);
+    setAdviceLoading(false);
     render();
+    renderPrev();
+    renderAdvice();
     return;
   }
   const { data: { session } } = await sb.auth.getSession();

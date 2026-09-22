@@ -1,23 +1,26 @@
 # GMAO Maintenance (fc-gmao)
 
-Application de GMAO (CMMS) pour le suivi des interventions de maintenance et des tâches préventives.
+Application de GMAO (CMMS) pour le suivi des interventions de maintenance, des tâches préventives et des conseils machines.
 
 - **Démo / prod** : https://fc-gmao.netlify.app
 - **Stack** : une seule page HTML autonome (CSS + JS inline), pas de build, connectée à [Supabase](https://supabase.com) (Postgres + API) via le SDK JS chargé en CDN.
 - **Fichiers** :
   - `index.html` — toute l'application (interface, styles, logique).
   - `favicon-fc.svg` — icône du site.
+  - `database/conseils_machine.sql` — schéma SQL, règles RLS et stockage privé du module Conseils machines.
 
 ## Configuration Supabase
 
-L'URL et la clé publique (anon) du projet Supabase sont définies en dur au début du script, vers la ligne 1155 :
+L'URL et la clé publique (anon) du projet Supabase sont définies en dur au début du script de `index.html` :
 
 ```js
 const SUPABASE_URL      = 'https://xxxx.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJ...';
 ```
 
-⚠️ Cette clé "anon" est censée être publique (elle est visible par n'importe qui ouvrant le site), mais elle donne accès aux tables `interventions` et `preventif` selon les règles **Row Level Security (RLS)** configurées côté Supabase. Avant de rendre ce dépôt public ou de le partager, vérifie que le RLS est bien activé et restrictif sur ces deux tables (Supabase → Authentication/Table Editor → Policies).
+⚠️ Cette clé "anon" est censée être publique (elle est visible par n'importe qui ouvrant le site), mais les accès aux tables `interventions`, `preventif` et `conseils_machine` dépendent des règles **Row Level Security (RLS)** configurées côté Supabase. Avant de rendre ce dépôt public ou de le partager, vérifie que le RLS est bien activé et adapté aux utilisateurs authentifiés (Supabase → Authentication/Table Editor → Policies).
+
+Le script SQL du module Conseils machines crée également le bucket privé `conseils-machines`, utilisé pour les photos jointes. L'application génère des liens temporaires signés pour les afficher.
 
 ## Développer en local
 

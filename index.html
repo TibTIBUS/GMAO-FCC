@@ -1658,9 +1658,18 @@ function adviceDbToApp(r) {
 let _cache = [];
 let _prevCache = [];
 let _adviceCache = [];
+let _cacheLoaded = false;
+let _prevCacheLoaded = false;
+let _adviceCacheLoaded = false;
+let _cacheRefreshing = false;
+let _prevCacheRefreshing = false;
+let _adviceCacheRefreshing = false;
 
-async function refreshCache() {
-  setLoading(true);
+async function refreshCache({ showLoader = false } = {}) {
+  if (_cacheRefreshing) return;
+  _cacheRefreshing = true;
+  const displayLoader = showLoader || !_cacheLoaded;
+  if (displayLoader) setLoading(true);
   try {
     _cache = await Store.getAll();
     updateConnStatus(true);
@@ -1669,27 +1678,42 @@ async function refreshCache() {
     updateConnStatus(false);
     toast('Erreur de connexion à la base de données');
   } finally {
-    setLoading(false);
+    _cacheLoaded = true;
+    _cacheRefreshing = false;
+    if (displayLoader) setLoading(false);
     render();
   }
 }
 
-async function refreshPrevCache() {
-  setPrevLoading(true);
+async function refreshPrevCache({ showLoader = false } = {}) {
+  if (_prevCacheRefreshing) return;
+  _prevCacheRefreshing = true;
+  const displayLoader = showLoader || !_prevCacheLoaded;
+  if (displayLoader) setPrevLoading(true);
   try { _prevCache = await PrevStore.getAll(); }
   catch(e) { console.error(e); }
-  finally { setPrevLoading(false); renderPrev(); }
+  finally {
+    _prevCacheLoaded = true;
+    _prevCacheRefreshing = false;
+    if (displayLoader) setPrevLoading(false);
+    renderPrev();
+  }
 }
 
-async function refreshAdviceCache() {
-  setAdviceLoading(true);
+async function refreshAdviceCache({ showLoader = false } = {}) {
+  if (_adviceCacheRefreshing) return;
+  _adviceCacheRefreshing = true;
+  const displayLoader = showLoader || !_adviceCacheLoaded;
+  if (displayLoader) setAdviceLoading(true);
   try {
     _adviceCache = await AdviceStore.getAll();
   } catch(e) {
     console.error('Erreur chargement conseils :', e);
     toast('Impossible de charger les conseils machines');
   } finally {
-    setAdviceLoading(false);
+    _adviceCacheLoaded = true;
+    _adviceCacheRefreshing = false;
+    if (displayLoader) setAdviceLoading(false);
     renderAdvice();
   }
 }
@@ -1759,7 +1783,8 @@ function setupRealtime() {
       updateConnStatus(status === 'SUBSCRIBED');
       if (status === 'SUBSCRIBED') {
         // On vient de (re)établir la connexion : on resynchronise au cas
-        // où des événements aient été manqués pendant la coupure.
+        // où des événements aient été manqués pendant la coupure. Cette
+        // mise à jour reste silencieuse pour ne pas masquer le tableau.
         refreshCache();
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         scheduleRealtimeReconnect();
@@ -3370,11 +3395,13 @@ function showLogin(show) {
 function startApp() {
   if (_appStarted) return;
   _appStarted = true;
+  // Le bandeau de chargement n'est affiché qu'au premier démarrage.
+  // Les resynchronisations suivantes se font sans interrompre l'utilisateur.
+  refreshCache({ showLoader: true });
+  if (typeof refreshPrevCache === 'function') refreshPrevCache({ showLoader: true });
+  if (typeof refreshAdviceCache === 'function') refreshAdviceCache({ showLoader: true });
   setupRealtime();
   setupAutoResync();
-  refreshCache();
-  if (typeof refreshPrevCache === 'function') refreshPrevCache();
-  if (typeof refreshAdviceCache === 'function') refreshAdviceCache();
 }
 
 /* Vérifie la session au chargement et écoute les changements d'état */

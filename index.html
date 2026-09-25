@@ -1860,6 +1860,9 @@ function onChannelStatus(name, channel, status) {
     _subscribed[name] = false;
     _needsSyncCheck = true;
     updateRealtimeStatus();
+    // Purger aussi le canal fermé du client : il ne doit pas rester dans
+    // la liste interne des abonnements lors de la prochaine connexion.
+    Promise.resolve(sb.removeChannel(channel)).catch(e => console.error(e));
     scheduleRealtimeReconnect();
   } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
     _subscribed[name] = false;

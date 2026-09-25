@@ -81,7 +81,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   const retry = [...timers].find(([, t]) => t.ms === 5000);
   timers.delete(retry[0]); retry[1].cb();
   assert.equal(calls.created, 4);
-  assert.equal(calls.removed, 0);
+  assert.equal(calls.removed, 1, 'canal fermé purgé sans boucle');
 
   // Un removeChannel volontaire (focus après erreur transitoire) n'entraîne
   // aucun nouveau timer de reconnexion depuis son callback CLOSED.
@@ -89,7 +89,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   clock += 60001;
   events.visibilitychange();
   await settle();
-  assert.equal(calls.removed, 1);
+  assert.equal(calls.removed, 2);
   assert.equal(calls.created, 5);
   assert.equal([...timers.values()].filter(t => t.ms === 5000).length, 0);
 

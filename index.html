@@ -1403,17 +1403,27 @@ if (configured) {
    ============================================================ */
 const Store = {
   TABLE: 'interventions',
+  // Les photos (base64) représentent presque tout le volume de cette table.
+  // Elles sont chargées uniquement à l'ouverture d'une fiche.
+  COLUMNS: 'id,ref,date_creation,date_modification,declarant,zone,description,priorite,statut,technicien,action_realisee,date_cloture,commentaire_final,observation,type_intervention',
 
   async getAll() {
     if (!sb) return [];
-    const { data, error } = await sb.from(this.TABLE).select('*').order('date_creation', { ascending: false });
-    if (error) { console.error(error); return []; }
+    const { data, error } = await sb.from(this.TABLE).select(this.COLUMNS).order('date_creation', { ascending: false });
+    if (error) throw error;
     return (data || []).map(dbToApp);
+  },
+
+  async getPhotos(id) {
+    const { data, error } = await sb.from(this.TABLE).select('photos').eq('id', id).single();
+    if (error) throw error;
+    try { return JSON.parse(data.photos || '[]'); }
+    catch(e) { throw new Error('Photos illisibles pour cette intervention'); }
   },
 
   async add(item) {
     if (!sb) return null;
-    const { data, error } = await sb.from(this.TABLE).insert([appToDB(item)]).select().single();
+    const { data, error } = await sb.from(this.TABLE).insert([appToDB(item)]).select(this.COLUMNS).single();
     if (error) { console.error(error); return null; }
     return dbToApp(data);
   },
@@ -1421,7 +1431,7 @@ const Store = {
   async update(id, changes) {
     if (!sb) return null;
     const payload = appToDB({ ...changes, dateModification: new Date().toISOString() });
-    const { data, error } = await sb.from(this.TABLE).update(payload).eq('id', id).select().single();
+    const { data, error } = await sb.from(this.TABLE).update(payload).eq('id', id).select(this.COLUMNS).single();
     if (error) { console.error(error); return null; }
     return dbToApp(data);
   },
@@ -1454,8 +1464,8 @@ const PrevStore = {
 
   async getAll() {
     if (!sb) return [];
-    const { data, error } = await sb.from(this.TABLE).select('*').order('prochaine_echeance', { ascending: true });
-    if (error) { console.error(error); return []; }
+    const { data, error } = await sb.from(this.TABLE).select('id,date_creation,date_modification,equipement,zone,description,frequence,derniere_realisation,prochaine_echeance,technicien,statut,observation').order('prochaine_echeance', { ascending: true });
+    if (error) throw error;
     return (data || []).map(prevDbToApp);
   },
 
@@ -1489,7 +1499,7 @@ const AdviceStore = {
 
   async getAll() {
     if (!sb) return [];
-    const { data, error } = await sb.from(this.TABLE).select('*').order('date_modification', { ascending: false });
+    const { data, error } = await sb.from(this.TABLE).select('id,titre,machine,zone,categorie,situation,procedure,securite,mots_cles,photos,auteur,date_creation,date_modification').order('date_modification', { ascending: false });
     if (error) { console.error(error); throw error; }
     return (data || []).map(adviceDbToApp);
   },
@@ -1740,26 +1750,131 @@ let _mainChannel = null;
 let _prevChannel = null;
 let _adviceChannel = null;
 let _realtimeReconnectTimer = null;
+let _reconnectAttempts = 0;
+let _realtimeStableTimer = null;
+let _lastRecoveryAt = 0;
+let _lastSignalCheckAt = 0;
+let _signalCheckPromise = null;
+let _fullSyncPromise = null;
+let _needsSyncCheck = false;
+const RECONNECT_DELAYS = [5000, 15000, 45000];
+const SYNC_CHECK_INTERVAL = 10 * 60 * 1000;
+const SYNC_CHECK_THROTTLE = 60 * 1000;
+const _subscribed = { main: false, prev: false, advice: false };
+
+function cachesLoaded() { return _cacheLoaded && _prevCacheLoaded && _adviceCacheLoaded; }
+
+function localSyncSignals() {
+  const values = [
+    ['interventions', _cache], ['preventif', _prevCache], ['conseils_machine', _adviceCache]
+  ];
+  return Object.fromEntries(values.map(([name, rows]) => [name, {
+    count: rows.length,
+    // L'arrondi à la milliseconde correspond à la précision des dates JS.
+    latest: Math.max(0, ...rows.map(row => Date.parse(row.dateModification) || 0))
+  }]));
+}
+
+function refreshAllCaches() {
+  if (_fullSyncPromise) return _fullSyncPromise;
+  _fullSyncPromise = Promise.all([refreshCache(), refreshPrevCache(), refreshAdviceCache()])
+    .finally(() => { _fullSyncPromise = null; });
+  return _fullSyncPromise;
+}
+
+// Un RPC de trois petites lignes, sans photos. Le couple count/max repère aussi
+// une suppression qui ne change pas la date de la dernière modification.
+function checkSyncSignals({ force = false } = {}) {
+  if (!sb || !navigator.onLine || document.visibilityState !== 'visible' || !cachesLoaded()) return Promise.resolve();
+  if (_signalCheckPromise) return _signalCheckPromise;
+  if (!force && Date.now() - _lastSignalCheckAt < SYNC_CHECK_THROTTLE) return Promise.resolve();
+  _lastSignalCheckAt = Date.now();
+  _signalCheckPromise = (async () => {
+    try {
+      const { data, error } = await sb.rpc('gmao_sync_signals');
+      if (error) throw error;
+      if (!Array.isArray(data) || data.length !== 3) throw new Error('Contrôle de synchronisation incomplet');
+      const local = localSyncSignals();
+      const changed = data.some(row => {
+        const expected = local[row.table_name];
+        return !expected || Number(row.row_count) !== expected.count ||
+          (Date.parse(row.latest_modified) || 0) !== expected.latest;
+      });
+      if (changed) await refreshAllCaches();
+      _needsSyncCheck = false;
+    } catch(e) {
+      console.error('Contrôle de synchronisation indisponible :', e);
+      _needsSyncCheck = true; // réessayer au prochain contrôle, sans télécharger toutes les lignes
+    }
+  })().finally(() => { _signalCheckPromise = null; });
+  return _signalCheckPromise;
+}
+
+function channelField(name) {
+  return name === 'main' ? _mainChannel : name === 'prev' ? _prevChannel : _adviceChannel;
+}
+function setChannelField(name, value) {
+  if (name === 'main') _mainChannel = value;
+  else if (name === 'prev') _prevChannel = value;
+  else _adviceChannel = value;
+}
+function dropChannel(name) {
+  const channel = channelField(name);
+  setChannelField(name, null); // Ignorer le CLOSED issu de notre propre removeChannel.
+  _subscribed[name] = false;
+  if (channel) Promise.resolve(sb.removeChannel(channel)).catch(e => console.error(e));
+}
+function updateRealtimeStatus() {
+  updateConnStatus(navigator.onLine && Object.values(_subscribed).every(Boolean));
+}
 
 function scheduleRealtimeReconnect() {
-  // Évite d'empiler plusieurs tentatives de reconnexion en parallèle.
-  if (_realtimeReconnectTimer) return;
+  if (_realtimeReconnectTimer || !navigator.onLine || document.visibilityState !== 'visible') return;
+  if (_reconnectAttempts >= RECONNECT_DELAYS.length) {
+    updateConnStatus(false); // reprise ensuite au retour du focus ou du réseau
+    return;
+  }
+  const delay = RECONNECT_DELAYS[_reconnectAttempts++];
   _realtimeReconnectTimer = setTimeout(() => {
     _realtimeReconnectTimer = null;
     setupRealtime();
-  }, 5000);
+  }, delay);
+}
+
+function onChannelStatus(name, channel, status) {
+  if (channelField(name) !== channel) return; // fermeture volontaire ou ancien canal
+  if (status === 'SUBSCRIBED') {
+    _subscribed[name] = true;
+    updateRealtimeStatus();
+    if (Object.values(_subscribed).every(Boolean)) {
+      if (_realtimeReconnectTimer) clearTimeout(_realtimeReconnectTimer);
+      _realtimeReconnectTimer = null;
+      if (_realtimeStableTimer) clearTimeout(_realtimeStableTimer);
+      _realtimeStableTimer = setTimeout(() => {
+        if (Object.values(_subscribed).every(Boolean)) _reconnectAttempts = 0;
+      }, 60 * 1000); // une connexion qui retombe immédiatement n'annule pas le backoff
+      if (_needsSyncCheck) checkSyncSignals({ force: true });
+    }
+  } else if (status === 'CLOSED') {
+    setChannelField(name, null);
+    _subscribed[name] = false;
+    _needsSyncCheck = true;
+    updateRealtimeStatus();
+    scheduleRealtimeReconnect();
+  } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+    _subscribed[name] = false;
+    _needsSyncCheck = true;
+    updateRealtimeStatus();
+    // Le SDK réessaie déjà ces états transitoires ; le focus / online
+    // reprend la main s'il ne parvient finalement pas à se réabonner.
+  }
 }
 
 function setupRealtime() {
-  if (!sb) return;
+  if (!sb || !navigator.onLine || document.visibilityState !== 'visible') return;
 
-  // Si des canaux existent déjà (ex. reconnexion), on les retire avant
-  // d'en recréer pour ne pas dupliquer les abonnements.
-  if (_mainChannel) { try { sb.removeChannel(_mainChannel); } catch(e) {} _mainChannel = null; }
-  if (_prevChannel) { try { sb.removeChannel(_prevChannel); } catch(e) {} _prevChannel = null; }
-  if (_adviceChannel) { try { sb.removeChannel(_adviceChannel); } catch(e) {} _adviceChannel = null; }
-
-  _mainChannel = sb.channel('gmao-changes')
+  if (!_mainChannel) {
+    const channel = sb.channel('gmao-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'interventions' }, payload => {
       if (payload.eventType === 'INSERT') {
         const item = dbToApp(payload.new);
@@ -1778,20 +1893,13 @@ function setupRealtime() {
           if (row) row.classList.add('updated-flash');
         }, 50);
       }
-    })
-    .subscribe(status => {
-      updateConnStatus(status === 'SUBSCRIBED');
-      if (status === 'SUBSCRIBED') {
-        // On vient de (re)établir la connexion : on resynchronise au cas
-        // où des événements aient été manqués pendant la coupure. Cette
-        // mise à jour reste silencieuse pour ne pas masquer le tableau.
-        refreshCache();
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        scheduleRealtimeReconnect();
-      }
     });
+    _mainChannel = channel;
+    channel.subscribe(status => onChannelStatus('main', channel, status));
+  }
 
-  _prevChannel = sb.channel('gmao-prev-changes')
+  if (!_prevChannel) {
+    const channel = sb.channel('gmao-prev-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'preventif' }, payload => {
       if (payload.eventType === 'INSERT') {
         const item = prevDbToApp(payload.new);
@@ -1804,10 +1912,13 @@ function setupRealtime() {
         _prevCache = _prevCache.filter(x => x.id !== payload.old.id);
       }
       renderPrev();
-    })
-    .subscribe();
+    });
+    _prevChannel = channel;
+    channel.subscribe(status => onChannelStatus('prev', channel, status));
+  }
 
-  _adviceChannel = sb.channel('gmao-advice-changes')
+  if (!_adviceChannel) {
+    const channel = sb.channel('gmao-advice-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'conseils_machine' }, payload => {
       if (payload.eventType === 'INSERT') {
         const item = adviceDbToApp(payload.new);
@@ -1820,37 +1931,38 @@ function setupRealtime() {
         _adviceCache = _adviceCache.filter(x => x.id !== payload.old.id);
       }
       renderAdvice();
-    })
-    .subscribe();
+    });
+    _adviceChannel = channel;
+    channel.subscribe(status => onChannelStatus('advice', channel, status));
+  }
 }
 
-/* Filets de sécurité complémentaires au temps réel : si un onglet reste
-   ouvert très longtemps (mise en veille, changement de réseau…), le canal
-   temps réel peut se couper sans que l'appli s'en rende compte. On force
-   donc une resynchronisation complète à chaque occasion plausible. */
+/* Reprise sur focus/online et contrôle léger toutes les 10 min visibles. */
 function setupAutoResync() {
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      refreshCache();
-      if (typeof refreshPrevCache === 'function') refreshPrevCache();
-      if (typeof refreshAdviceCache === 'function') refreshAdviceCache();
+  const recover = () => {
+    if (!navigator.onLine || document.visibilityState !== 'visible') return;
+    const now = Date.now();
+    if (now - _lastRecoveryAt < SYNC_CHECK_THROTTLE) return;
+    _lastRecoveryAt = now;
+    if (_realtimeReconnectTimer) clearTimeout(_realtimeReconnectTimer);
+    _realtimeReconnectTimer = null;
+    _reconnectAttempts = 0; // événement utilisateur/réseau : nouveau cycle borné
+    for (const name of ['main', 'prev', 'advice']) {
+      if (channelField(name) && !_subscribed[name]) dropChannel(name);
     }
+    setupRealtime();
+    checkSyncSignals();
+  };
+  document.addEventListener('visibilitychange', recover);
+  window.addEventListener('online', recover);
+  window.addEventListener('offline', () => {
+    if (_realtimeReconnectTimer) clearTimeout(_realtimeReconnectTimer);
+    _realtimeReconnectTimer = null;
+    updateConnStatus(false);
   });
-
-  window.addEventListener('online', () => {
-    refreshCache();
-    if (typeof refreshPrevCache === 'function') refreshPrevCache();
-    if (typeof refreshAdviceCache === 'function') refreshAdviceCache();
-    setupRealtime(); // le canal temps réel ne survit pas toujours à une coupure réseau
-  });
-
-  // Filet de sécurité ultime : resynchronisation périodique même si tout
-  // semble fonctionner normalement côté temps réel.
   setInterval(() => {
-    refreshCache();
-    if (typeof refreshPrevCache === 'function') refreshPrevCache();
-    if (typeof refreshAdviceCache === 'function') refreshAdviceCache();
-  }, 2 * 60 * 1000);
+    if (Date.now() - _lastSignalCheckAt >= SYNC_CHECK_INTERVAL) checkSyncSignals();
+  }, SYNC_CHECK_INTERVAL);
 }
 
 /* ============================================================
@@ -2621,9 +2733,12 @@ async function openNew() {
   if (eRefEl.value === provisionalRef) eRefEl.value = suggestNextRef();
 }
 
-function openEdit(id) {
+async function openEdit(id) {
   const x = _cache.find(i => i.id === id);
   if (!x) return;
+  let photos;
+  try { photos = await Store.getPhotos(id); }
+  catch(e) { console.error(e); toast('Impossible de charger les photos : modification annulée'); return; }
   document.getElementById('editTitle').textContent = 'Modifier — ' + x.ref;
   document.getElementById('eId').value = x.id;
   document.getElementById('eRef').value = x.ref;
@@ -2640,7 +2755,7 @@ function openEdit(id) {
     (x.dateModification ? ' · modifié le ' + fmtDate(x.dateModification) : '');
   // Charger photos existantes
   _pendingPhotos  = [];
-  _existingPhotos = x.photos ? [...x.photos] : [];
+  _existingPhotos = photos;
   renderPhotoPreviews();
   showModal(modalEdit);
 }
@@ -2762,15 +2877,18 @@ document.getElementById('btnConfirmClose').addEventListener('click', async () =>
    ============================================================ */
 const modalView = document.getElementById('modalView');
 
-function openView(id) {
+async function openView(id) {
   const x = _cache.find(i => i.id === id);
   if (!x) return;
+  let photos;
+  try { photos = await Store.getPhotos(id); }
+  catch(e) { console.error(e); toast('Impossible de charger la fiche de cette intervention'); return; }
   const row = (label, val) => `<div class="field"><label>${label}</label><div>${val}</div></div>`;
 
-  const photosHtml = (x.photos && x.photos.length > 0)
-    ? `<div class="field"><label>Photos (${x.photos.length})</label>
+  const photosHtml = photos.length > 0
+    ? `<div class="field"><label>Photos (${photos.length})</label>
          <div class="photo-gallery">
-           ${x.photos.map((url, i) =>
+           ${photos.map((url, i) =>
              `<a href="${esc(url)}" target="_blank" title="Voir photo ${i+1}"><img src="${esc(url)}" alt="Photo ${i+1}"></a>`
            ).join('')}
          </div>
@@ -3397,9 +3515,11 @@ function startApp() {
   _appStarted = true;
   // Le bandeau de chargement n'est affiché qu'au premier démarrage.
   // Les resynchronisations suivantes se font sans interrompre l'utilisateur.
-  refreshCache({ showLoader: true });
-  if (typeof refreshPrevCache === 'function') refreshPrevCache({ showLoader: true });
-  if (typeof refreshAdviceCache === 'function') refreshAdviceCache({ showLoader: true });
+  Promise.all([
+    refreshCache({ showLoader: true }),
+    refreshPrevCache({ showLoader: true }),
+    refreshAdviceCache({ showLoader: true })
+  ]).then(() => { if (_needsSyncCheck) checkSyncSignals({ force: true }); });
   setupRealtime();
   setupAutoResync();
 }

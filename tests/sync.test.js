@@ -12,6 +12,7 @@ assert.ok(html.includes(".select('photos').eq('id', id)"), 'photos chargées à 
 let clock = 1000000;
 let nextTimer = 0;
 const timers = new Map();
+const intervals = [];
 const events = {};
 const calls = { rpc: 0, full: 0, created: 0, removed: 0 };
 const channels = [];
@@ -28,7 +29,7 @@ const context = {
   navigator: { onLine: true },
   setTimeout(cb, ms) { const id = ++nextTimer; timers.set(id, { cb, ms }); return id; },
   clearTimeout(id) { timers.delete(id); },
-  setInterval() {},
+  setInterval(cb, ms) { intervals.push({ cb, ms }); },
   console,
   _cacheLoaded: true, _prevCacheLoaded: true, _adviceCacheLoaded: true,
   _cache: [{ id: 1, dateModification: '2026-09-25T09:00:00.000Z' }],
@@ -65,15 +66,23 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   evalIn('setupRealtime(); setupAutoResync()');
   assert.equal(calls.created, 3, 'un canal par table');
 
-  // 20 allers-retours rapides, aucune liste intégrale et un seul RPC.
+  // 20 allers-retours rapides, aucune liste intégrale ni contrôle prématuré.
   for (let i = 0; i < 20; i++) {
     document.visibilityState = 'hidden'; events.visibilitychange();
     document.visibilityState = 'visible'; events.visibilitychange();
   }
   await settle();
-  assert.equal(calls.rpc, 1);
+  assert.equal(calls.rpc, 0);
   assert.equal(calls.full, 0);
   assert.equal(calls.created, 3);
+
+  // Dix minutes écoulées sans focus : un contrôle léger, aucune liste.
+  assert.equal(intervals[0].ms, 60000);
+  clock += 10 * 60 * 1000;
+  intervals[0].cb();
+  await settle();
+  assert.equal(calls.rpc, 1);
+  assert.equal(calls.full, 0);
 
   // Le CLOSED inattendu programme 5s, puis recrée uniquement le canal fermé.
   channels[0].callback('CLOSED');

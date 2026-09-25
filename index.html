@@ -1942,6 +1942,9 @@ function setupRealtime() {
 
 /* Reprise sur focus/online et contrôle léger toutes les 10 min visibles. */
 function setupAutoResync() {
+  // Le premier contrôle périodique est dû 10 min après le chargement,
+  // puis 10 min après le dernier contrôle (y compris un retour de focus).
+  if (!_lastSignalCheckAt) _lastSignalCheckAt = Date.now();
   const recover = () => {
     if (!navigator.onLine || document.visibilityState !== 'visible') return;
     const now = Date.now();
@@ -1965,7 +1968,7 @@ function setupAutoResync() {
   });
   setInterval(() => {
     if (Date.now() - _lastSignalCheckAt >= SYNC_CHECK_INTERVAL) checkSyncSignals();
-  }, SYNC_CHECK_INTERVAL);
+  }, 60 * 1000); // vérification locale de l'horloge, sans requête réseau
 }
 
 /* ============================================================

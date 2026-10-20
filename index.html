@@ -1387,6 +1387,21 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
    INITIALISATION
    ============================================================ */
 const configured = !SUPABASE_URL.startsWith('REMPLACER');
+
+/* Certains réseaux d'entreprise (pare-feu de l'usine) coupent l'accès direct à
+   *.supabase.co. Les requêtes HTTP (connexion, lecture, écriture, photos) passent
+   donc par le site lui-même : /sb/* est relayé par Netlify (voir _redirects).
+   Le temps réel (WebSocket) reste en direct ; s'il est bloqué, le contrôle
+   périodique de 10 min prend le relais. */
+const SUPABASE_PROXY_BASE = (location.protocol.startsWith('http') && /netlify\.app$/.test(location.hostname))
+  ? location.origin + '/sb' : null;
+function proxifySupabaseUrl(input) {
+  if (!SUPABASE_PROXY_BASE) return input;
+  const url = typeof input === 'string' ? input : (input && input.url) || String(input);
+  if (!url.startsWith(SUPABASE_URL + '/')) return input;
+  const proxied = SUPABASE_PROXY_BASE + url.slice(SUPABASE_URL.length);
+  return typeof input === 'string' || input instanceof URL ? proxied : new Request(proxied, input);
+}
 if (!configured) document.getElementById('configBanner').classList.add('show');
 
 let sb = null;
@@ -1394,7 +1409,9 @@ if (configured) {
   try {
     const _lib = window.supabase || window.Supabase;
     if (!_lib) throw new Error('Bibliothèque Supabase non chargée');
-    sb = _lib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    sb = _lib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { fetch: (input, init) => fetch(proxifySupabaseUrl(input), init) }
+    });
   } catch(e) { console.error('Erreur init Supabase :', e); }
 }
 
@@ -2609,7 +2626,7 @@ async function getAdvicePhotoUrls(paths) {
     const { data, error } = await sb.storage.from(ADVICE_BUCKET).createSignedUrls(missing, 3600);
     if (error) console.error('Erreur URLs photos conseils :', error);
     (data || []).forEach((item, index) => {
-      if (item && item.signedUrl) _advicePhotoUrlCache.set(item.path || missing[index], item.signedUrl);
+      if (item && item.signedUrl) _advicePhotoUrlCache.set(item.path || missing[index], proxifySupabaseUrl(item.signedUrl));
     });
   }
   return (paths || []).map(path => ({ path, url: _advicePhotoUrlCache.get(path) || '' }));

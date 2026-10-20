@@ -3558,17 +3558,43 @@ loginForm.addEventListener('submit', async (e) => {
   loginError.textContent = '';
   loginBtn.disabled = true;
   loginBtn.textContent = 'Connexion…';
-  const { error } = await sb.auth.signInWithPassword({
-    email: loginEmail.value.trim(),
-    password: loginPwd.value
-  });
+  let error = null;
+  try {
+    ({ error } = await sb.auth.signInWithPassword({
+      email: loginEmail.value.trim(),
+      password: loginPwd.value
+    }));
+  } catch (e) {
+    error = e || { message: 'Erreur inconnue' };
+  }
   loginBtn.disabled = false;
   loginBtn.textContent = 'Se connecter';
   loginPwd.value = '';
   if (error) {
-    loginError.textContent = 'Identifiants incorrects. Réessaie.';
+    console.error('Erreur de connexion :', error);
+    loginError.textContent = loginErrorMessage(error);
   }
 });
+
+/* Traduit l'erreur Supabase en message clair (au lieu de toujours « identifiants incorrects ») */
+function loginErrorMessage(error) {
+  const code = error.code || error.error_code || '';
+  const status = error.status || 0;
+  const msg = String(error.message || '');
+  if (code === 'invalid_credentials' || /invalid login credentials/i.test(msg))
+    return 'Identifiants incorrects. Réessaie.';
+  if (code === 'email_not_confirmed' || /not confirmed/i.test(msg))
+    return 'Adresse e-mail non confirmée. Contacte l’administrateur.';
+  if (code === 'user_banned' || /banned/i.test(msg))
+    return 'Compte désactivé. Contacte l’administrateur.';
+  if (status === 429 || /rate limit|too many/i.test(msg))
+    return 'Trop de tentatives. Patiente quelques minutes puis réessaie.';
+  if (status === 402 || /quota|egress/i.test(msg))
+    return 'Base de données suspendue (quota dépassé). Contacte l’administrateur.';
+  if (!status || /fetch|network|load failed/i.test(msg))
+    return 'Impossible de joindre le serveur. Vérifie la connexion internet puis réessaie.';
+  return 'Erreur de connexion (' + (code || status) + ') : ' + msg;
+}
 
 /* Déconnexion */
 if (btnLogout) btnLogout.addEventListener('click', async () => {
